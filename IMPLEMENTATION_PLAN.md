@@ -4,13 +4,13 @@
 
 One installable toolkit that any MCP client, agent, developer, or CI system can use to build, test, secure, localize and ship an Android app end to end. It combines five tools that are also distributed separately:
 
-| Tool | Role in the kit |
-|---|---|
-| [`emu-lab`](https://github.com/fridaysundaymood/emu-lab) | Devices: leased emulators, isolated builds, deterministic app state, test runners, failure triage |
-| [`maestro-flow`](https://github.com/fridaysundaymood/maestro-flow) | UI journeys: Maestro flows written from journeys and string resources, linted, iterated on devices |
-| [`supa-multiuser-harness`](https://github.com/fridaysundaymood/supa-multiuser-harness) | Backend: verified local Supabase, multi-user fixtures, simulated phones, permission and race attack suite |
-| [`indonesian-english-linter`](https://github.com/fridaysundaymood/indonesian-english-linter) | Localization: display-boundary checks for EN/ID (configurable locale pairs) |
-| [`supa-release-gate-mcp`](https://github.com/fridaysundaymood/supa-release-gate-mcp) | Release: plan → dry run → approval → execute → verify → ledger for Supabase, Play, Cloudflare, GCP |
+| Tool                                                                                         | Role in the kit                                                                                           |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [`emu-lab`](https://github.com/fridaysundaymood/emu-lab)                                     | Devices: leased emulators, isolated builds, deterministic app state, test runners, failure triage         |
+| [`maestro-flow`](https://github.com/fridaysundaymood/maestro-flow)                           | UI journeys: Maestro flows written from journeys and string resources, linted, iterated on devices        |
+| [`supa-multiuser-harness`](https://github.com/fridaysundaymood/supa-multiuser-harness)       | Backend: verified local Supabase, multi-user fixtures, simulated phones, permission and race attack suite |
+| [`indonesian-english-linter`](https://github.com/fridaysundaymood/indonesian-english-linter) | Localization: display-boundary checks for EN/ID (configurable locale pairs)                               |
+| [`supa-release-gate-mcp`](https://github.com/fridaysundaymood/supa-release-gate-mcp)         | Release: plan → dry run → approval → execute → verify → ledger for Supabase, Play, Cloudflare, GCP        |
 
 Separate repos first so each is useful and reviewable on its own; the kit is the composition, not a rewrite.
 
@@ -35,14 +35,14 @@ These rules are the shared contract for the kit and each separately distributed 
 
 1. **MCP names.** Prefix every tool as follows, including orchestration:
 
-   | Component | Prefix |
-   |---|---|
-   | emu-lab | `emu_lab_*` |
-   | maestro-flow | `maestro_flow_*` |
-   | supa-multiuser-harness | `backend_*` |
-   | supa-release-gate-mcp | `release_*` |
-   | indonesian-english-linter | `i18n_*` |
-   | kit orchestration | `kit_*` |
+   | Component                 | Prefix           |
+   | ------------------------- | ---------------- |
+   | emu-lab                   | `emu_lab_*`      |
+   | maestro-flow              | `maestro_flow_*` |
+   | supa-multiuser-harness    | `backend_*`      |
+   | supa-release-gate-mcp     | `release_*`      |
+   | indonesian-english-linter | `i18n_*`         |
+   | kit orchestration         | `kit_*`          |
 
 2. **Result envelope.** Publish the v1 JSON Schema as the semver-versioned `kit-schema` package. Every tool returns `{ schema_version: "1", tool, operation, run_id, status: pass|fail|flaky|blocked|unsupported|error, classification?: app|test|environment|config, summary, evidence[], artifacts[], started_at, duration_ms }`. `fail` means the thing under test failed; `error` means the tool itself failed; `blocked` means a precondition or policy refused the operation; `unsupported` means the capability is unavailable and is never silently skipped. Tools declare their supported `kit-schema` major; the kit refuses incompatible majors with a clear error.
 3. **Layers and access.** Every tool has a core library, a CLI, and a thin tools-only MCP adapter using stdio. Every CLI command supports `--json` and emits the envelope; documented exit codes are 0 for pass, 1 for fail or flaky, and 2 for error, blocked, or unsupported. Everything available through MCP is also available through CLI. No adapter depends on client-specific features; optional MCP features such as progress or elicitation degrade gracefully.
@@ -69,7 +69,7 @@ The stdio MCP server works with any MCP client; the CLI works with any agent or 
 
 ## Milestones
 
-1. **K0 (now, during tool M1s):** publish `kit-schema` and `android-kit.yaml` spec; every tool adopts them in its first milestone.
+1. **K0 (done):** `kit-schema` and `android-kit.yaml` spec implemented; every tool adopts them in its first milestone.
 2. **K1:** `kit-fixture-app` repo with seeded defects for each tool (unlabeled control, stale selector, raw-id display, RLS hole, race, state-leak test).
 3. **K2:** kit MCP server mounting emu-lab + maestro-flow; `kit_verify` for the device half.
 4. **K3:** add backend harness and linter to `kit_verify`.

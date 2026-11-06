@@ -1,0 +1,28 @@
+{
+  "name": "@android-kit/schema",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./result.v1.json": "./result.v1.json",
+    "./config.v1.json": "./config.v1.json"
+  },
+  "files": [
+    "dist",
+    "result.v1.json",
+    "config.v1.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.8.1"
+  }
+}

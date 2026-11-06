@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "android-kit configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "emuLab": {
+      "type": "object"
+    },
+    "maestroFlow": {
+      "type": "object"
+    },
+    "backend": {
+      "type": "object"
+    },
+    "i18n": {
+      "type": "object"
+    },
+    "releaseGate": {
+      "type": "object"
+    }
+  }
+}
