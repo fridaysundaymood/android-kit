@@ -2,7 +2,7 @@
 
 **Build, test, secure, localize, and ship an Android app end to end, from one AI-agent toolkit.**
 
-android-kit combines five focused tools into one MCP server, one skill pack, and one CLI. An AI agent (or you) can go from a code change to a verified release candidate: lint, build once, test on isolated devices, run UI journeys, attack the backend, and prepare a release that waits for your approval.
+android-kit combines five focused tools into one MCP server, one skill pack, and one CLI. It is harness-agnostic: use any MCP client, agent, or CLI-only CI.
 
 ## Status
 
@@ -26,8 +26,8 @@ Android developers (Kotlin/Compose, optionally Supabase) who use AI coding agent
 
 ## Planned kit features
 
-- **One MCP server** with all tool libraries mounted, plus `kit_status`, `kit_verify` (lint → build → device tests → UI journeys → backend scenarios → summary), and `kit_release_readiness` (verify, then prepare release plans without executing).
-- **Skill pack:** one guide per stage (setup, test, triage, localize, secure, release) telling an agent which tools to call and in what order.
+- **One MCP server** with TypeScript libraries and the JVM linter CLI composed behind it, plus `kit_status`, `kit_verify` (lint → build → device tests → UI journeys → backend scenarios → summary), and `kit_release_readiness` (verify, then prepare release plans without executing).
+- **Skill pack:** plain Markdown guides with CLI and MCP equivalents for each step, plus an `AGENTS.md` snippet.
 - **CLI:** `kit init`, `kit verify`, `kit release plan`, `kit doctor`.
 - **Shared conventions:** one result format, one `android-kit.yaml` config, one artifact folder (`.android-kit/runs/`), and a synthetic sample app every tool is tested against.
 
