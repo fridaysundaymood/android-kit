@@ -143,12 +143,13 @@ describe('kit orchestration', () => {
     }
   });
   it.each([
-    ['emu-lab-quarantine', true],
-    ['emu-lab-quarantine', false],
-    ['emu-lab-lease-unavailable', true],
+    ['emu-lab-quarantine', true, true],
+    ['emu-lab-quarantine', false, false],
+    ['emu-lab-quarantine', true, false],
+    ['emu-lab-lease-unavailable', true, true],
   ] as const)(
-    'replaces a suite lease after %s (replacement succeeds: %s)',
-    async (kind, replacementSucceeds) => {
+    'replaces a suite lease after %s (lease: %s, install: %s)',
+    async (kind, replacementSucceeds, installSucceeds) => {
       const projectRoot = await mkdtemp(join(tmpdir(), 'kit-recovery-'));
       try {
         await mkdir(join(projectRoot, 'flows'));
@@ -185,6 +186,8 @@ describe('kit orchestration', () => {
               if (leases === 2 && !replacementSucceeds)
                 response.status = 'error';
             }
+            if (name === 'emu_lab_install' && !installSucceeds)
+              response.status = 'error';
             if (name === 'maestro_flow_run' && ++runs === 1) {
               response.status = 'error';
               response.classification = 'environment';
@@ -206,7 +209,7 @@ describe('kit orchestration', () => {
             item.operation === 'maestro_flow_run',
         );
         expect(flowResults.map((item) => item.status)).toEqual(
-          replacementSucceeds
+          replacementSucceeds && installSucceeds
             ? ['error', 'pass', 'pass']
             : ['error', 'blocked', 'blocked'],
         );
@@ -215,7 +218,7 @@ describe('kit orchestration', () => {
           expect.objectContaining({ kind }),
         );
         expect(leases).toBe(2);
-        expect(runs).toBe(replacementSucceeds ? 3 : 1);
+        expect(runs).toBe(replacementSucceeds && installSucceeds ? 3 : 1);
         expect(
           mock.calls
             .filter(({ name }) => name === 'maestro_flow_run')
@@ -226,13 +229,25 @@ describe('kit orchestration', () => {
                 : undefined;
             }),
         ).toEqual(
-          replacementSucceeds ? ['lease-1', 'lease-2', 'lease-2'] : ['lease-1'],
+          replacementSucceeds && installSucceeds
+            ? ['lease-1', 'lease-2', 'lease-2']
+            : ['lease-1'],
         );
         expect(
           mock.calls
             .filter(({ name }) => name === 'emu_lab_release_device')
             .map(({ args }) => args.leaseId),
         ).toEqual(replacementSucceeds ? ['lease-2'] : []);
+        const installs = mock.calls.filter(
+          ({ name }) => name === 'emu_lab_install',
+        );
+        expect(installs).toHaveLength(replacementSucceeds ? 1 : 0);
+        if (replacementSucceeds)
+          expect(installs[0]?.args).toMatchObject({
+            apk: join(projectRoot, 'app.apk'),
+            packageName: 'dev.example',
+            leaseId: 'lease-2',
+          });
       } finally {
         await rm(projectRoot, { recursive: true, force: true });
       }

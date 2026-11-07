@@ -10,7 +10,7 @@ The kit combines independent tools; installing it does not make every external p
 
 Verification continues with independent steps after failures; only missing prerequisites block dependent work. The overall status is the worst individual status. Use `kit verify --fail-fast` or MCP `kit_verify` with `failFast: true` to stop subsequent work after the first non-passing result; cleanup still runs. Set `build.projectRoot` when the Gradle project is nested beneath the kit project root; relative APK paths resolve from that build root.
 
-If a Maestro flow detects a quarantined lease, its result records the environment failure. Unless fail-fast is enabled, the kit attempts one replacement lease for the remaining flows. If that acquisition fails, or the replacement is also quarantined, remaining flows are blocked rather than run against the dead lease. Quarantined devices remain under emu-lab's ownership and are not released as active leases.
+If a Maestro flow detects a quarantined or unavailable lease, its result records the environment failure. Unless fail-fast is enabled, the kit attempts one replacement lease and installs the built app APK before running the remaining flows. If acquisition or installation fails, or the replacement also becomes unavailable, remaining flows are blocked rather than run against an unusable device. Quarantined devices remain under emu-lab's ownership and are not released as active leases.
 
 An explicitly configured relative `emuLab.databasePath` is resolved from the process working directory by emu-lab; run the kit from a consistent directory or use an absolute path. Without that setting, the lease database is under the kit project root.
 

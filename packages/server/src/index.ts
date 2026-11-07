@@ -524,7 +524,13 @@ export async function invokeKit(
                     value
                   ) {
                     leaseId = value;
-                    flowBlocker = undefined;
+                    const install = await step('emu_lab_install', {
+                      apk: resolve(buildRoot, String(apk)),
+                      packageName,
+                      leaseId,
+                    });
+                    flowBlocker =
+                      install.status === 'pass' ? undefined : 'emu_lab_install';
                   } else {
                     if (replacement.status === 'pass')
                       note(
