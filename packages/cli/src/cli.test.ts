@@ -269,3 +269,24 @@ describe('kit CLI', () => {
     expect(runStdio).toHaveBeenCalled();
   });
 });
+
+it('only replaces an existing configuration with init --force', async () => {
+  const root = await temporary();
+  await writeFile(join(root, 'android-kit.yaml'), 'user: keep\n');
+  expect((await command(['init', '--root', root])).result.status).toBe(
+    'blocked',
+  );
+  expect(await readFile(join(root, 'android-kit.yaml'), 'utf8')).toBe(
+    'user: keep\n',
+  );
+  expect(
+    (await command(['init', '--root', root, '--force'])).result.status,
+  ).toBe('pass');
+  expect(await readFile(join(root, 'android-kit.yaml'), 'utf8')).not.toContain(
+    'user: keep',
+  );
+  expect((await command(['status', '--force'])).result.status).toBe('error');
+  expect((await command(['init', '--force', '--force'])).result.status).toBe(
+    'error',
+  );
+});

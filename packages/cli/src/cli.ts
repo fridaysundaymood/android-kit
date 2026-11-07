@@ -43,7 +43,7 @@ Options:
 Run kit <command> --help for command options.`;
 
 const commandUsage: Record<string, string> = {
-  init: 'Usage: kit init [--root <path>] [--json]',
+  init: 'Usage: kit init [--root <path>] [--force] [--json]',
   status: 'Usage: kit status [--root <path>] [--args <json>] [--json]',
   verify:
     'Usage: kit verify [--root <path>] [--scope <all|device|backend|lint>] [--args <json>] [--json]',
@@ -130,7 +130,10 @@ async function detect(root: string): Promise<{
   };
 }
 
-export async function init(projectRoot: string): Promise<Result> {
+export async function init(
+  projectRoot: string,
+  options: { force?: boolean } = {},
+): Promise<Result> {
   const startedAt = new Date();
   const run_id = newRunId();
   try {
@@ -186,14 +189,16 @@ export async function init(projectRoot: string): Promise<Result> {
     await writeFile(
       join(root, 'android-kit.yaml'),
       `${variants}${JSON.stringify(config, null, 2)}\n`,
-      { flag: 'wx' },
+      { flag: options.force ? 'w' : 'wx' },
     );
     return createResult({
       tool: 'kit',
       operation: 'init',
       run_id,
       status: 'pass',
-      summary: 'Created android-kit.yaml',
+      summary: options.force
+        ? 'Replaced android-kit.yaml'
+        : 'Created android-kit.yaml',
       evidence: [found],
       artifacts: ['android-kit.yaml'],
       startedAt,
@@ -263,6 +268,12 @@ export async function run(
         json = true;
         continue;
       }
+      if (arg === '--force') {
+        if (options[arg] !== undefined)
+          throw new Error(`Invalid option ${arg}`);
+        options[arg] = 'true';
+        continue;
+      }
       if (arg.startsWith('--')) {
         if (
           !['--root', '--scope', '--plan', '--args'].includes(arg) ||
@@ -277,6 +288,8 @@ export async function run(
     operation = positional.join(' ') || 'cli';
     const root = resolve(options['--root'] ?? process.cwd());
     const command = positional[0];
+    if (options['--force'] && command !== 'init')
+      throw new Error('--force is only valid for init');
     let result: Result;
     if (
       command === 'mcp' &&
@@ -294,7 +307,7 @@ export async function run(
       !options['--plan'] &&
       !options['--args']
     )
-      result = await init(root);
+      result = await init(root, { force: options['--force'] === 'true' });
     else if (
       command === 'tool' &&
       positional.length === 2 &&

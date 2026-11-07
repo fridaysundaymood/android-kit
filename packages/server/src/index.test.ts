@@ -163,16 +163,19 @@ describe('kit orchestration', () => {
       await rm(projectRoot, { recursive: true, force: true });
     }
   });
-  it('stops a started stack on failure and reports unsupported absent suite', async () => {
+  it('stops a started stack on failure and runs the default suite', async () => {
     const mock = recorder('backend_stack_verify');
     expect(
       (await invokeKit('verify', { scope: 'backend' }, mock.invoke)).status,
     ).toBe('fail');
     expect(mock.calls.at(-1)?.name).toBe('backend_stack_down');
-    const other = recorder(undefined, false, 'backend_run_attacks');
+    const other = recorder();
     expect(
       (await invokeKit('verify', { scope: 'backend' }, other.invoke)).status,
-    ).toBe('unsupported');
+    ).toBe('pass');
+    expect(other.calls.map(({ name }) => name)).toContain(
+      'backend_default_suite',
+    );
     expect(other.calls.at(-1)?.name).toBe('backend_stack_down');
   });
   it('does not stop an already running stack', async () => {
@@ -234,8 +237,20 @@ describe('kit orchestration', () => {
     const invoked = mock.calls.map(({ name }) => name);
     expect(invoked).not.toContain('backend_stack_up');
     expect(invoked).not.toContain('backend_stack_verify');
-    expect(invoked).not.toContain('backend_run_default_suite');
+    expect(invoked).not.toContain('backend_default_suite');
     expect(output.status).not.toBe('pass');
+  });
+
+  it('routes the default suite through the harness tool definition', async () => {
+    expect(backendTools().map(({ name }) => name)).toContain(
+      'backend_default_suite',
+    );
+    const mock = recorder();
+    const output = await invokeKit('verify', { scope: 'backend' }, mock.invoke);
+    expect(output.status).toBe('pass');
+    expect(mock.calls.map(({ name }) => name)).toContain(
+      'backend_default_suite',
+    );
   });
 
   it('reports missing sections without starting component tools', async () => {

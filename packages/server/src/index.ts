@@ -537,14 +537,11 @@ export async function invokeKit(
             if (!blockedBy) await step('backend_stack_verify');
             if (typeof backendOptions.file === 'string')
               await step('backend_run_scenario', backendOptions);
-            else if (
-              blockedBy ||
-              componentByName.has('backend_run_default_suite')
-            )
-              await step('backend_run_default_suite', backendOptions);
+            else if (blockedBy || componentByName.has('backend_default_suite'))
+              await step('backend_default_suite', backendOptions);
             else
               note(
-                'backend_run_default_suite',
+                'backend_default_suite',
                 'unsupported',
                 'Default backend suite unavailable in installed harness version.',
               );
@@ -557,7 +554,7 @@ export async function invokeKit(
           await step(
             typeof backendOptions.file === 'string'
               ? 'backend_run_scenario'
-              : 'backend_run_default_suite',
+              : 'backend_default_suite',
             backendOptions,
           );
         }
