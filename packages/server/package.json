@@ -1,0 +1,28 @@
+{
+  "name": "@android-kit/server",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@android-kit/schema": "file:../kit-schema",
+    "@android-kit/emu-lab": "file:../../../emu-lab",
+    "maestro-flow": "file:../../../maestro-flow",
+    "@android-kit/supa-multiuser-harness": "file:../../../supa-multiuser-harness",
+    "@android-kit/supa-release-gate-mcp": "file:../../../supa-release-gate-mcp",
+    "@android-kit/i18n-mcp": "file:../../../indonesian-english-linter/mcp",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "ajv": "^8.17.1",
+    "yaml": "^2.8.1"
+  }
+}

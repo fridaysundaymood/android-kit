@@ -1,0 +1,18 @@
+name: Android kit verification
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The project must declare @android-kit/cli and the selected tool prerequisites.
+      - run: npm ci
+      - name: Verify
+        run: npx --no-install kit verify --scope lint --json

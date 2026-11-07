@@ -1,0 +1,11 @@
+# Lifecycle
+
+The kit combines independent tools; installing it does not make every external prerequisite available. Run `kit doctor --json` (MCP: `kit_doctor`) and inspect `kit status --json` (MCP: `kit_status`) first. Status includes backend status and release status, including pending plans; it does not approve or execute those plans.
+
+1. **Localize and lint:** `kit verify --scope lint --json` (MCP: `kit_verify` with `scope: "lint"`). Review the findings against source and resources.
+2. **Build and exercise the UI:** `kit verify --scope device --json` (MCP: `kit_verify` with `scope: "device"`). Device tests and Maestro require their own installed tools and device prerequisites.
+3. **Test backend isolation:** `kit verify --scope backend --json` (MCP: `kit_verify` with `scope: "backend"`). Use a verified disposable local Supabase project and synthetic accounts only.
+4. **Review the whole result:** `kit verify --scope all --json` (MCP: `kit_verify` with `scope: "all"`). Verification stops executing at the first non-pass; skipped stages appear as blocked evidence. Inspect individual results and their evidence; blocked or unsupported stages are not passes.
+5. **Plan release:** `kit release plan --plan '<JSON object>' --json` (MCP: `kit_release_readiness` with `plan`). Supply a valid release-gate plan; a missing plan is blocked. Review verification and plans. Planning is not approval or execution. Production writes require the release gate's explicit approval workflow.
+
+The tools keep their own responsibilities: emu-lab handles device and build operations, maestro-flow handles journeys and selectors, the backend harness tests local multi-user behavior, the i18n linter checks display boundaries, and the release gate owns release actions. Direct tool calls use `kit tool <MCP_TOOL_NAME> --args '<JSON object>' --json`, equivalent to calling the named MCP tool with that JSON object. The MCP server exposes each sibling's own tool input schema. Check each tool's published reference for its parameters and external prerequisites. Pass component options to orchestration using `--args '<JSON object>'` or the equivalent MCP arguments: `i18n`, `maestro`, `build`, `instrumentation`, and `backend`.

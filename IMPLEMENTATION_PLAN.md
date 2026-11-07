@@ -69,12 +69,11 @@ The stdio MCP server works with any MCP client; the CLI works with any agent or 
 
 ## Milestones
 
-1. **K0 (done):** `kit-schema` and `android-kit.yaml` spec implemented; every tool adopts them in its first milestone.
-2. **K1:** `kit-fixture-app` repo with seeded defects for each tool (unlabeled control, stale selector, raw-id display, RLS hole, race, state-leak test).
-3. **K2:** kit MCP server mounting emu-lab + maestro-flow; `kit_verify` for the device half.
-4. **K3:** add backend harness and linter to `kit_verify`.
-5. **K4:** release gate integration and `kit_release_readiness`; skill pack; docs site.
-6. **K5:** community release: versioned packages, templates, example CI.
+1. **K0 implemented:** shared `kit-schema` and configuration contract.
+2. **K1 fixture available:** `kit-fixture-app` provides clean and deliberately defective synthetic flavors; consult its defect inventory and tool-specific results.
+3. **K2–K3 implementation:** the kit CLI and MCP server compose tool operations and verification scopes. Availability of a stage depends on installed tools and their prerequisites; blocked and unsupported results do not count as passes.
+4. **K4 implementation:** release readiness, lifecycle skills, and the VitePress guides are included. Release plans are not approval or deployment.
+5. **K5 in progress:** configuration and CI templates are included. Publishing versioned packages and the full cross-platform and multi-client compatibility matrix remain release work.
 
 ## Distribution
 

@@ -1,0 +1,72 @@
+name: Documentation
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-kit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: android-kit
+      - uses: actions/checkout@v4
+        with:
+          repository: fridaysundaymood/emu-lab
+          path: emu-lab
+          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: fridaysundaymood/maestro-flow
+          path: maestro-flow
+          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: fridaysundaymood/supa-multiuser-harness
+          path: supa-multiuser-harness
+          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: fridaysundaymood/supa-release-gate-mcp
+          path: supa-release-gate-mcp
+          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: fridaysundaymood/indonesian-english-linter
+          path: indonesian-english-linter
+          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build --workspace=@android-kit/schema
+      - run: npm ci && npm run build
+        working-directory: emu-lab
+      - run: npm ci && npm run build
+        working-directory: maestro-flow
+      - run: npm ci && npm run build
+        working-directory: supa-multiuser-harness
+      - run: npm ci && npm run build
+        working-directory: supa-release-gate-mcp
+      - run: npm ci && npm run build
+        working-directory: indonesian-english-linter/mcp
+      - run: npm run docs:build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: android-kit/docs/.vitepress/dist
+      - id: deploy
+        uses: actions/deploy-pages@v4

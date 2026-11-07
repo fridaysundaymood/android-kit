@@ -1,12 +1,10 @@
 # android-kit
 
-**Build, test, secure, localize, and ship an Android app end to end, from one AI-agent toolkit.**
-
-android-kit combines five focused tools into one MCP server, one skill pack, and one CLI. It is harness-agnostic: use any MCP client, agent, or CLI-only CI.
+Shared Android development tools for CLI and MCP clients.
 
 ## Status
 
-> **K0 implemented:** the shared [result schema](docs/kit-schema.md) and [configuration contract](docs/android-kit-yaml.md) are available. The tools ship separately first; the combined kit follows. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+The repository contains the shared [result schema](docs/kit-schema.md), [configuration contract](docs/android-kit-yaml.md), kit CLI and MCP orchestration, lifecycle [skills](skills/), and a VitePress documentation site. The kit composes the sibling packages through their public tool definitions and configuration schemas; the i18n MCP package wraps its JVM CLI. External prerequisites remain separate; an unavailable or blocked capability is not a passing check. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for milestones and remaining release work.
 
 ## The tools
 
@@ -24,12 +22,21 @@ Each one is useful on its own:
 
 Android developers (Kotlin/Compose, optionally Supabase) who use AI coding agents and want them to test and ship safely, not just write code.
 
-## Planned kit features
+## Use from a checkout
 
-- **One MCP server** with TypeScript libraries and the JVM linter CLI composed behind it, plus `kit_status`, `kit_verify` (lint → build → device tests → UI journeys → backend scenarios → summary), and `kit_release_readiness` (verify, then prepare release plans without executing).
-- **Skill pack:** plain Markdown guides with CLI and MCP equivalents for each step, plus an `AGENTS.md` snippet.
-- **CLI:** `kit init`, `kit verify`, `kit release plan`, `kit doctor`.
-- **Shared conventions:** one result format, one `android-kit.yaml` config, one artifact folder (`.android-kit/runs/`), and a synthetic sample app every tool is tested against.
+Install Node.js LTS, then run `npm ci` and `npm run build`. Install or link the `@android-kit/cli` workspace package to put `kit` on your PATH. In an Android project:
+
+```sh
+kit init --json
+kit doctor --json
+kit status --json
+kit verify --scope all --json
+kit release plan --plan '<JSON object>' --json
+```
+
+Use `--root PATH` to select another project. `kit mcp` starts the stdio server. Direct MCP tools are also callable with `kit tool <MCP_TOOL_NAME> --args '<JSON object>' --json`. Status includes the backend and release gate's pending plans. A release plan must be supplied; planning does not approve or execute it.
+
+Read the [getting-started guide](docs/getting-started.md) for platform prerequisites and the [fixture walkthrough](docs/fixture.md) for a synthetic example. Run `npm run docs:dev` to browse the site locally or `npm run docs:build` to build it. Templates for configuration and CI live in [templates](templates/); configure the external tools required by the chosen scope before using them.
 
 ## Contributing
 

@@ -8,13 +8,17 @@
   ],
   "scripts": {
     "lint": "biome check .",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace=@android-kit/schema && npm run build --workspace=@android-kit/server && npm run build --workspace=@android-kit/cli",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "test": "vitest run"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.8",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "vitepress": "^1.6.4"
   }
 }

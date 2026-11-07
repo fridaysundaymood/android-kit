@@ -1,0 +1,6 @@
+# Add a tool's documented settings only when that tool is configured.
+emuLab: {}
+maestroFlow: {}
+backend: {}
+i18n: {}
+releaseGate: {}
