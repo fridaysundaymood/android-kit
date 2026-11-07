@@ -142,6 +142,102 @@ describe('kit orchestration', () => {
       await rm(projectRoot, { recursive: true, force: true });
     }
   });
+  it.each([
+    ['emu-lab-quarantine', true],
+    ['emu-lab-quarantine', false],
+    ['emu-lab-lease-unavailable', true],
+  ] as const)(
+    'replaces a suite lease after %s (replacement succeeds: %s)',
+    async (kind, replacementSucceeds) => {
+      const projectRoot = await mkdtemp(join(tmpdir(), 'kit-recovery-'));
+      try {
+        await mkdir(join(projectRoot, 'flows'));
+        for (const name of ['a', 'b', 'c'])
+          await writeFile(
+            join(projectRoot, 'flows', `${name}.yaml`),
+            'appId: example',
+          );
+        const mock = recorder();
+        let leases = 0;
+        let runs = 0;
+        const output = await invokeKit(
+          'verify',
+          {
+            projectRoot,
+            scope: 'device',
+            build: { variant: 'debug' },
+            instrumentation: {
+              packageName: 'dev.example',
+              runner: 'dev.example.test/Runner',
+            },
+            maestro: { flowsDir: 'flows' },
+          },
+          async (name, args) => {
+            const response = await mock.invoke(name, args);
+            if (name === 'emu_lab_lease_device') {
+              leases++;
+              response.evidence =
+                leases === 1
+                  ? [{ leaseId: 'lease-1' }]
+                  : replacementSucceeds
+                    ? [{ leaseId: 'lease-2' }]
+                    : [];
+              if (leases === 2 && !replacementSucceeds)
+                response.status = 'error';
+            }
+            if (name === 'maestro_flow_run' && ++runs === 1) {
+              response.status = 'error';
+              response.classification = 'environment';
+              response.evidence = [
+                {
+                  kind,
+                  reason: 'synthetic device failure',
+                },
+              ];
+            }
+            return response;
+          },
+        );
+        const flowResults = output.evidence.filter(
+          (item): item is Result =>
+            !!item &&
+            typeof item === 'object' &&
+            'operation' in item &&
+            item.operation === 'maestro_flow_run',
+        );
+        expect(flowResults.map((item) => item.status)).toEqual(
+          replacementSucceeds
+            ? ['error', 'pass', 'pass']
+            : ['error', 'blocked', 'blocked'],
+        );
+        expect(flowResults[0]?.classification).toBe('environment');
+        expect(flowResults[0]?.evidence).toContainEqual(
+          expect.objectContaining({ kind }),
+        );
+        expect(leases).toBe(2);
+        expect(runs).toBe(replacementSucceeds ? 3 : 1);
+        expect(
+          mock.calls
+            .filter(({ name }) => name === 'maestro_flow_run')
+            .map(({ args }) => {
+              const target = args.emuLab;
+              return target && typeof target === 'object' && 'leaseId' in target
+                ? target.leaseId
+                : undefined;
+            }),
+        ).toEqual(
+          replacementSucceeds ? ['lease-1', 'lease-2', 'lease-2'] : ['lease-1'],
+        );
+        expect(
+          mock.calls
+            .filter(({ name }) => name === 'emu_lab_release_device')
+            .map(({ args }) => args.leaseId),
+        ).toEqual(replacementSucceeds ? ['lease-2'] : []);
+      } finally {
+        await rm(projectRoot, { recursive: true, force: true });
+      }
+    },
+  );
   it('derives literal Gradle instrumentation settings for a fixture', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'kit-gradle-'));
     try {

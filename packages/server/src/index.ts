@@ -448,6 +448,7 @@ export async function invokeKit(
           blockedBy = 'emu_lab_build';
         else blockedBy = undefined;
         let leaseId: string | undefined;
+        let hadLease = false;
         try {
           if (!blockedBy && !(args.failFast && firstFailure)) {
             const lease = await step(
@@ -467,6 +468,7 @@ export async function invokeKit(
             } else blockedBy = 'emu_lab_lease_device';
           }
           if (leaseId) {
+            hadLease = true;
             if (!instrumentationMissing)
               await step('emu_lab_run_instrumentation', {
                 ...instrumentation,
@@ -476,27 +478,72 @@ export async function invokeKit(
                 runner,
                 leaseId,
               });
-            for (const flow of flows)
-              await step('maestro_flow_run', {
-                ...maestroOptions,
-                flow,
-                suite: true,
-                emuLab: {
-                  databasePath:
-                    typeof emuConfig.databasePath === 'string'
-                      ? resolve(emuConfig.databasePath)
-                      : resolve(rootPath, '.android-kit/emu-lab.sqlite'),
-                  leaseId,
-                  packageName,
+            let replacementAttempted = false;
+            let flowBlocker: string | undefined;
+            for (const [index, flow] of flows.entries()) {
+              const flowResult = await step(
+                'maestro_flow_run',
+                {
+                  ...maestroOptions,
+                  flow,
+                  suite: true,
+                  emuLab: {
+                    databasePath:
+                      typeof emuConfig.databasePath === 'string'
+                        ? resolve(emuConfig.databasePath)
+                        : resolve(rootPath, '.android-kit/emu-lab.sqlite'),
+                    leaseId,
+                    packageName,
+                  },
                 },
-              });
+                flowBlocker,
+              );
+              if (
+                flowResult.evidence.some((item) =>
+                  ['emu-lab-quarantine', 'emu-lab-lease-unavailable'].includes(
+                    String(object(item).kind),
+                  ),
+                )
+              ) {
+                leaseId = undefined;
+                flowBlocker = 'the unavailable device lease';
+                if (
+                  index < flows.length - 1 &&
+                  !replacementAttempted &&
+                  !(args.failFast && firstFailure)
+                ) {
+                  replacementAttempted = true;
+                  const replacement = await step(
+                    'emu_lab_lease_device',
+                    object(args.lease),
+                  );
+                  const value = object(replacement.evidence[0]).leaseId;
+                  if (
+                    replacement.status === 'pass' &&
+                    typeof value === 'string' &&
+                    value
+                  ) {
+                    leaseId = value;
+                    flowBlocker = undefined;
+                  } else {
+                    if (replacement.status === 'pass')
+                      note(
+                        'emu_lab_lease_device',
+                        'error',
+                        'Replacement device lease response did not include a leaseId; cannot safely run or release it.',
+                      );
+                    flowBlocker = 'emu_lab_lease_device';
+                  }
+                }
+              }
+            }
           }
         } finally {
           if (leaseId) {
             await call('emu_lab_release_device', { leaseId });
           }
         }
-        if (!leaseId) {
+        if (!hadLease) {
           const dependency =
             blockedBy ?? (args.failFast ? firstFailure : undefined);
           if (
