@@ -480,38 +480,40 @@ export async function invokeKit(
               });
             let replacementAttempted = false;
             let flowBlocker: string | undefined;
-            for (const [index, flow] of flows.entries()) {
-              const flowResult = await step(
-                'maestro_flow_run',
-                {
-                  ...maestroOptions,
-                  flow,
-                  suite: true,
-                  emuLab: {
-                    databasePath:
-                      typeof emuConfig.databasePath === 'string'
-                        ? resolve(emuConfig.databasePath)
-                        : resolve(rootPath, '.android-kit/emu-lab.sqlite'),
-                    leaseId,
-                    packageName,
+            for (const flow of flows) {
+              const runFlow = () =>
+                call(
+                  'maestro_flow_run',
+                  {
+                    ...maestroOptions,
+                    flow,
+                    suite: true,
+                    emuLab: {
+                      databasePath:
+                        typeof emuConfig.databasePath === 'string'
+                          ? resolve(emuConfig.databasePath)
+                          : resolve(rootPath, '.android-kit/emu-lab.sqlite'),
+                      leaseId,
+                      packageName,
+                    },
                   },
-                },
-                flowBlocker,
-              );
-              if (
-                flowResult.evidence.some((item) =>
+                  (flowBlocker ?? (args.failFast ? firstFailure : undefined)) &&
+                    `Not run because ${flowBlocker ?? firstFailure} did not pass`,
+                );
+              const lostDevice = (result: Result) =>
+                result.evidence.some((item) =>
                   ['emu-lab-quarantine', 'emu-lab-lease-unavailable'].includes(
                     String(object(item).kind),
                   ),
-                )
-              ) {
+                );
+              let flowResult = await runFlow();
+              if (lostDevice(flowResult)) {
                 leaseId = undefined;
                 flowBlocker = 'the unavailable device lease';
-                if (
-                  index < flows.length - 1 &&
-                  !replacementAttempted &&
-                  !(args.failFast && firstFailure)
-                ) {
+                const interrupted = flowResult;
+                interrupted.status = 'blocked';
+                interrupted.classification = 'environment';
+                if (!replacementAttempted) {
                   replacementAttempted = true;
                   const replacement = await step(
                     'emu_lab_lease_device',
@@ -531,6 +533,17 @@ export async function invokeKit(
                     });
                     flowBlocker =
                       install.status === 'pass' ? undefined : 'emu_lab_install';
+                    if (!flowBlocker) {
+                      results.splice(results.indexOf(interrupted), 1);
+                      flowResult = await runFlow();
+                      flowResult.evidence.unshift(interrupted);
+                      if (lostDevice(flowResult)) {
+                        leaseId = undefined;
+                        flowBlocker = 'the unavailable device lease';
+                        flowResult.status = 'blocked';
+                        flowResult.classification = 'environment';
+                      }
+                    }
                   } else {
                     if (replacement.status === 'pass')
                       note(
@@ -542,6 +555,8 @@ export async function invokeKit(
                   }
                 }
               }
+              if (flowResult.status !== 'pass' && !firstFailure)
+                firstFailure = 'maestro_flow_run';
             }
           }
         } finally {

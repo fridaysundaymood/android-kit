@@ -210,15 +210,19 @@ describe('kit orchestration', () => {
         );
         expect(flowResults.map((item) => item.status)).toEqual(
           replacementSucceeds && installSucceeds
-            ? ['error', 'pass', 'pass']
-            : ['error', 'blocked', 'blocked'],
+            ? ['pass', 'pass', 'pass']
+            : ['blocked', 'blocked', 'blocked'],
         );
-        expect(flowResults[0]?.classification).toBe('environment');
-        expect(flowResults[0]?.evidence).toContainEqual(
+        const interrupted =
+          replacementSucceeds && installSucceeds
+            ? (flowResults[0]?.evidence[0] as Result)
+            : flowResults[0];
+        expect(interrupted?.classification).toBe('environment');
+        expect(interrupted?.evidence).toContainEqual(
           expect.objectContaining({ kind }),
         );
         expect(leases).toBe(2);
-        expect(runs).toBe(replacementSucceeds && installSucceeds ? 3 : 1);
+        expect(runs).toBe(replacementSucceeds && installSucceeds ? 4 : 1);
         expect(
           mock.calls
             .filter(({ name }) => name === 'maestro_flow_run')
@@ -230,7 +234,7 @@ describe('kit orchestration', () => {
             }),
         ).toEqual(
           replacementSucceeds && installSucceeds
-            ? ['lease-1', 'lease-2', 'lease-2']
+            ? ['lease-1', 'lease-2', 'lease-2', 'lease-2']
             : ['lease-1'],
         );
         expect(
@@ -251,6 +255,50 @@ describe('kit orchestration', () => {
       } finally {
         await rm(projectRoot, { recursive: true, force: true });
       }
+    },
+  );
+  it.each([false, true])(
+    'retries a lost final flow; retry loss: %s',
+    async (retryLosesDevice) => {
+      const mock = recorder();
+      let leases = 0;
+      let runs = 0;
+      const output = await invokeKit(
+        'verify',
+        {
+          scope: 'device',
+          failFast: true,
+          build: { variant: 'debug' },
+          instrumentation: {
+            packageName: 'dev.example',
+            runner: 'dev.example.test/Runner',
+          },
+          maestro: { flow: 'last.yaml' },
+        },
+        async (name, args) => {
+          const response = await mock.invoke(name, args);
+          if (name === 'emu_lab_lease_device')
+            response.evidence = [{ leaseId: `lease-${++leases}` }];
+          if (
+            name === 'maestro_flow_run' &&
+            (++runs === 1 || retryLosesDevice)
+          ) {
+            response.status = 'error';
+            response.classification = 'environment';
+            response.evidence = [{ kind: 'emu-lab-quarantine' }];
+          }
+          return response;
+        },
+      );
+      expect(output.status).toBe(retryLosesDevice ? 'blocked' : 'pass');
+      expect(runs).toBe(2);
+      expect(leases).toBe(2);
+      expect(
+        mock.calls.filter(({ name }) => name === 'emu_lab_install'),
+      ).toHaveLength(1);
+      expect(
+        mock.calls.filter(({ name }) => name === 'emu_lab_release_device'),
+      ).toHaveLength(retryLosesDevice ? 0 : 1);
     },
   );
   it('derives literal Gradle instrumentation settings for a fixture', async () => {
