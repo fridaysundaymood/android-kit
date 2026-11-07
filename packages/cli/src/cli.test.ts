@@ -237,6 +237,17 @@ describe('kit CLI', () => {
     ).toBe(0);
     expect(invokeKit).toHaveBeenCalledWith('verify', args);
     expect(
+      (await command(['verify', '--root', root, '--fail-fast'])).code,
+    ).toBe(0);
+    expect(invokeKit).toHaveBeenCalledWith('verify', {
+      projectRoot: root,
+      failFast: true,
+    });
+    expect((await command(['status', '--fail-fast'])).code).toBe(2);
+    expect((await command(['verify', '--fail-fast', '--fail-fast'])).code).toBe(
+      2,
+    );
+    expect(
       (
         await command([
           'release',

@@ -46,7 +46,7 @@ const commandUsage: Record<string, string> = {
   init: 'Usage: kit init [--root <path>] [--force] [--json]',
   status: 'Usage: kit status [--root <path>] [--args <json>] [--json]',
   verify:
-    'Usage: kit verify [--root <path>] [--scope <all|device|backend|lint>] [--args <json>] [--json]',
+    'Usage: kit verify [--root <path>] [--scope <all|device|backend|lint>] [--fail-fast] [--args <json>] [--json]',
   doctor: 'Usage: kit doctor [--root <path>] [--args <json>] [--json]',
   release:
     'Usage: kit release plan [--root <path>] [--scope <all|device|backend|lint>] [--plan <json>] [--args <json>] [--json]',
@@ -268,7 +268,7 @@ export async function run(
         json = true;
         continue;
       }
-      if (arg === '--force') {
+      if (arg === '--force' || arg === '--fail-fast') {
         if (options[arg] !== undefined)
           throw new Error(`Invalid option ${arg}`);
         options[arg] = 'true';
@@ -290,6 +290,8 @@ export async function run(
     const command = positional[0];
     if (options['--force'] && command !== 'init')
       throw new Error('--force is only valid for init');
+    if (options['--fail-fast'] && command !== 'verify')
+      throw new Error('--fail-fast is only valid for verify');
     let result: Result;
     if (
       command === 'mcp' &&
@@ -348,6 +350,7 @@ export async function run(
         kitOperation as 'status' | 'verify' | 'doctor' | 'release_readiness',
         {
           ...args,
+          ...(options['--fail-fast'] ? { failFast: true } : {}),
           projectRoot: options['--root']
             ? root
             : typeof args.projectRoot === 'string'

@@ -226,19 +226,75 @@ describe('kit orchestration', () => {
       'release_doctor',
     ]);
   });
-  it('never verifies or runs the default suite against a stack that was not started', async () => {
-    // Device build fails first, so the backend scope runs after a block. Stack-touching steps must not run.
+  it('continues independent backend checks after a device build failure', async () => {
     const mock = recorder('emu_lab_build');
     const output = await invokeKit(
       'verify',
-      { scope: 'all', build: { variant: 'debug' }, backend: {} },
+      {
+        scope: 'all',
+        build: { variant: 'debug' },
+        maestro: { flow: 'flow.yaml' },
+      },
       mock.invoke,
     );
     const invoked = mock.calls.map(({ name }) => name);
-    expect(invoked).not.toContain('backend_stack_up');
-    expect(invoked).not.toContain('backend_stack_verify');
-    expect(invoked).not.toContain('backend_default_suite');
-    expect(output.status).not.toBe('pass');
+    expect(output.status).toBe('fail');
+    expect(invoked).not.toContain('emu_lab_lease_device');
+    expect(invoked).toContain('backend_default_suite');
+    expect(invoked).toContain('backend_stack_down');
+  });
+
+  it('skips independent checks after a failure when failFast is enabled', async () => {
+    const mock = recorder('i18n_lint');
+    const output = await invokeKit(
+      'verify',
+      {
+        scope: 'all',
+        failFast: true,
+        build: { variant: 'debug' },
+        maestro: { flow: 'flow.yaml' },
+      },
+      mock.invoke,
+    );
+    expect(output.status).toBe('fail');
+    expect(mock.calls.map(({ name }) => name)).toEqual(['i18n_lint']);
+  });
+
+  it('uses the build project root for Gradle settings and relative APK artifacts', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'kit-build-root-'));
+    const buildRoot = join(projectRoot, 'nested');
+    try {
+      await mkdir(join(buildRoot, 'app'), { recursive: true });
+      await writeFile(
+        join(buildRoot, 'app', 'build.gradle.kts'),
+        'android { defaultConfig { applicationId = "dev.synthetic"; testInstrumentationRunner = "dev.synthetic.Runner" } }',
+      );
+      const mock = recorder();
+      const output = await invokeKit(
+        'verify',
+        {
+          projectRoot,
+          scope: 'device',
+          build: { projectRoot: buildRoot, variant: 'debug' },
+          maestro: { flow: 'flow.yaml' },
+        },
+        mock.invoke,
+      );
+      expect(output.status).toBe('pass');
+      expect(
+        mock.calls.find(({ name }) => name === 'emu_lab_run_instrumentation')
+          ?.args,
+      ).toEqual(
+        expect.objectContaining({
+          apk: join(buildRoot, 'app.apk'),
+          testApk: join(buildRoot, 'androidTest.apk'),
+          packageName: 'dev.synthetic',
+          runner: 'dev.synthetic.test/dev.synthetic.Runner',
+        }),
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it('routes the default suite through the harness tool definition', async () => {

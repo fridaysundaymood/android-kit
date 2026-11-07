@@ -58,6 +58,7 @@ type KitOperation = (typeof kitOperations)[number];
 export type KitArgs = {
   projectRoot?: string;
   scope?: 'all' | 'device' | 'backend' | 'lint';
+  failFast?: boolean;
   plan?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -196,6 +197,8 @@ export async function invokeKit(
       throw new Error(`Unknown scope: ${scope}`);
     if (operation === 'release_readiness' && scope !== 'all')
       throw new Error('Release readiness requires full verification');
+    if (args.failFast !== undefined && typeof args.failFast !== 'boolean')
+      throw new Error('failFast must be a boolean');
     const root = { projectRoot: args.projectRoot };
     const sections =
       invoke === invokeTool
@@ -262,16 +265,20 @@ export async function invokeKit(
       const instrumentation = object(args.instrumentation);
       const backendOptions = object(args.backend);
       let blockedBy: string | undefined;
+      let firstFailure: string | undefined;
       const step = async (
         name: string,
         options: Record<string, unknown> = {},
+        dependency?: string,
       ) => {
+        const blocker =
+          dependency ?? (args.failFast ? firstFailure : undefined);
         const result = await call(
           name,
           options,
-          blockedBy && `Not run because ${blockedBy} did not pass`,
+          blocker && `Not run because ${blocker} did not pass`,
         );
-        if (result.status !== 'pass' && !blockedBy) blockedBy = name;
+        if (result.status !== 'pass' && !firstFailure) firstFailure = name;
         return result;
       };
       const note = (name: string, status: Status, summary: string) => {
@@ -287,7 +294,7 @@ export async function invokeKit(
           startedAt,
         });
         results.push(result);
-        if (status !== 'pass' && !blockedBy) blockedBy = name;
+        if (status !== 'pass' && !firstFailure) firstFailure = name;
       };
       let flows: string[] = [];
       if (scope === 'all' || scope === 'lint' || scope === 'device') {
@@ -309,9 +316,9 @@ export async function invokeKit(
           );
           return paths.flat().sort();
         };
-        if (!blockedBy && sections && !('maestroFlow' in sections))
+        if (sections && !('maestroFlow' in sections))
           await step('maestro_flow_lint');
-        if (!blockedBy) {
+        if (!(args.failFast && firstFailure)) {
           try {
             flows =
               typeof selected === 'string'
@@ -341,33 +348,38 @@ export async function invokeKit(
           }
         }
         if (
-          blockedBy &&
+          args.failFast &&
+          firstFailure &&
           !flows.length &&
           !(sections && !('maestroFlow' in sections))
         )
           await step('maestro_flow_lint', maestroOptions);
-        for (const flow of flows) {
-          const result = await call(
-            'maestro_flow_lint',
-            { ...maestroOptions, flow },
-            blockedBy && `Not run because ${blockedBy} did not pass`,
-          );
-          if (result.status !== 'pass' && !blockedBy)
-            blockedBy = 'maestro_flow_lint';
-        }
+        for (const flow of flows)
+          await step('maestro_flow_lint', { ...maestroOptions, flow });
       }
       if (scope === 'all' || scope === 'device') {
         const buildOptions = {
           ...object(emuConfig.build),
           ...object(args.build),
         };
-        if (!blockedBy && typeof buildOptions.variant !== 'string')
+        if (typeof buildOptions.projectRoot === 'string')
+          buildOptions.projectRoot = resolve(
+            rootPath,
+            buildOptions.projectRoot,
+          );
+        const buildRoot =
+          typeof buildOptions.projectRoot === 'string'
+            ? buildOptions.projectRoot
+            : rootPath;
+        if (typeof buildOptions.variant !== 'string') {
           note(
             'emu_lab_build',
             'blocked',
             'Set build.variant to the Gradle variant to verify, for example debug.',
           );
-        const build = await step('emu_lab_build', buildOptions);
+          blockedBy = 'emu_lab_build';
+        }
+        const build = await step('emu_lab_build', buildOptions, blockedBy);
         const apk =
           typeof instrumentation.apk === 'string'
             ? instrumentation.apk
@@ -393,7 +405,7 @@ export async function invokeKit(
           let gradle = '';
           for (const file of ['build.gradle.kts', 'build.gradle']) {
             try {
-              gradle = await readFile(resolve(rootPath, module, file), 'utf8');
+              gradle = await readFile(resolve(buildRoot, module, file), 'utf8');
               break;
             } catch (error) {
               if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
@@ -421,21 +433,23 @@ export async function invokeKit(
           if (typeof runner !== 'string' && runnerClass && testPackage)
             runner = `${testPackage}/${runnerClass}`;
         }
-        if (
-          !blockedBy &&
-          (!apk ||
-            !testApk ||
-            typeof packageName !== 'string' ||
-            typeof runner !== 'string')
-        )
+        const instrumentationMissing =
+          !apk ||
+          !testApk ||
+          typeof packageName !== 'string' ||
+          typeof runner !== 'string';
+        if (instrumentationMissing)
           note(
             'emu_lab_run_instrumentation',
             'blocked',
             'Provide instrumentation.packageName and instrumentation.runner (test package/runner), and build both app and androidTest APKs or set instrumentation.apk and testApk. Dynamic or variant-specific Gradle values require explicit arguments.',
           );
+        if (!apk || typeof packageName !== 'string')
+          blockedBy = 'emu_lab_build';
+        else blockedBy = undefined;
         let leaseId: string | undefined;
         try {
-          if (!blockedBy) {
+          if (!blockedBy && !(args.failFast && firstFailure)) {
             const lease = await step(
               'emu_lab_lease_device',
               object(args.lease),
@@ -443,82 +457,83 @@ export async function invokeKit(
             const value = object(lease.evidence[0]).leaseId;
             if (lease.status === 'pass' && typeof value === 'string' && value)
               leaseId = value;
-            else if (lease.status === 'pass')
+            else if (lease.status === 'pass') {
               note(
                 'emu_lab_lease_device',
                 'error',
                 'Device lease response did not include a leaseId; cannot safely run or release it.',
               );
+              blockedBy = 'emu_lab_lease_device';
+            } else blockedBy = 'emu_lab_lease_device';
           }
           if (leaseId) {
-            await step('emu_lab_run_instrumentation', {
-              ...instrumentation,
-              apk: resolve(rootPath, String(apk)),
-              testApk: resolve(rootPath, String(testApk)),
-              packageName,
-              runner,
-              leaseId,
-            });
-            if (!blockedBy) {
-              for (const flow of flows) {
-                const result = await call('maestro_flow_run', {
-                  ...maestroOptions,
-                  flow,
-                  suite: true,
-                  emuLab: {
-                    databasePath:
-                      emuConfig.databasePath ?? '.android-kit/emu-lab.sqlite',
-                    leaseId,
-                    packageName,
-                  },
-                });
-                if (result.status !== 'pass' && !blockedBy)
-                  blockedBy = 'maestro_flow_run';
-              }
-            }
+            if (!instrumentationMissing)
+              await step('emu_lab_run_instrumentation', {
+                ...instrumentation,
+                apk: resolve(buildRoot, String(apk)),
+                testApk: resolve(buildRoot, String(testApk)),
+                packageName,
+                runner,
+                leaseId,
+              });
+            for (const flow of flows)
+              await step('maestro_flow_run', {
+                ...maestroOptions,
+                flow,
+                suite: true,
+                emuLab: {
+                  databasePath:
+                    emuConfig.databasePath ?? '.android-kit/emu-lab.sqlite',
+                  leaseId,
+                  packageName,
+                },
+              });
           }
         } finally {
           if (leaseId) {
-            const released = await call('emu_lab_release_device', { leaseId });
-            if (released.status !== 'pass' && !blockedBy)
-              blockedBy = 'emu_lab_release_device';
+            await call('emu_lab_release_device', { leaseId });
           }
         }
-        if (!leaseId && blockedBy) {
+        if (!leaseId) {
+          const dependency =
+            blockedBy ?? (args.failFast ? firstFailure : undefined);
           if (
             !results.some((item) => item.operation === 'emu_lab_lease_device')
           )
-            await step('emu_lab_lease_device', object(args.lease));
+            await step('emu_lab_lease_device', object(args.lease), dependency);
           if (
             !results.some(
               (item) => item.operation === 'emu_lab_run_instrumentation',
             )
           )
-            await step('emu_lab_run_instrumentation', instrumentation);
-          await step('maestro_flow_run', maestroOptions);
-        } else if (
-          leaseId &&
-          blockedBy &&
-          !results.some((item) => item.operation === 'maestro_flow_run')
-        ) {
-          await step('maestro_flow_run', maestroOptions);
+            await step(
+              'emu_lab_run_instrumentation',
+              instrumentation,
+              dependency,
+            );
+          await step('maestro_flow_run', maestroOptions, dependency);
         }
       }
       if (scope === 'all' || scope === 'backend') {
+        blockedBy = args.failFast ? firstFailure : undefined;
         if (!blockedBy) {
           const status = await step('backend_status');
           const running = object(status.evidence[0]).running;
-          if (status.status === 'pass' && typeof running !== 'boolean')
+          if (status.status !== 'pass') blockedBy = 'backend_status';
+          else if (typeof running !== 'boolean') {
             note(
               'backend_status',
               'unsupported',
               'Backend status did not report whether the local stack is running.',
             );
+            blockedBy = 'backend_status';
+          }
           let started = false;
           try {
             if (!blockedBy && !running) {
               const up = await step('backend_stack_up');
               started = up.status === 'pass';
+              if (!started) blockedBy = 'backend_stack_up';
               if (started)
                 results.push(
                   createResult({
@@ -534,11 +549,11 @@ export async function invokeKit(
                   }),
                 );
             }
-            if (!blockedBy) await step('backend_stack_verify');
+            await step('backend_stack_verify', {}, blockedBy);
             if (typeof backendOptions.file === 'string')
-              await step('backend_run_scenario', backendOptions);
+              await step('backend_run_scenario', backendOptions, blockedBy);
             else if (blockedBy || componentByName.has('backend_default_suite'))
-              await step('backend_default_suite', backendOptions);
+              await step('backend_default_suite', backendOptions, blockedBy);
             else
               note(
                 'backend_default_suite',
@@ -563,8 +578,8 @@ export async function invokeKit(
         await call(
           'release_plan_change',
           { plan: args.plan },
-          blockedBy
-            ? `Not run because ${blockedBy} did not pass`
+          firstFailure
+            ? `Not run because ${firstFailure} did not pass`
             : !args.plan
               ? 'A release plan is required'
               : undefined,
@@ -608,6 +623,7 @@ export function createServer(): Server {
               enum: ['all', 'device', 'backend', 'lint'],
             },
             plan: { type: 'object' },
+            failFast: { type: 'boolean' },
             i18n: { type: 'object' },
             maestro: { type: 'object' },
             build: { type: 'object' },
