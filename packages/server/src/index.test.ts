@@ -223,6 +223,21 @@ describe('kit orchestration', () => {
       'release_doctor',
     ]);
   });
+  it('never verifies or runs the default suite against a stack that was not started', async () => {
+    // Device build fails first, so the backend scope runs after a block. Stack-touching steps must not run.
+    const mock = recorder('emu_lab_build');
+    const output = await invokeKit(
+      'verify',
+      { scope: 'all', build: { variant: 'debug' }, backend: {} },
+      mock.invoke,
+    );
+    const invoked = mock.calls.map(({ name }) => name);
+    expect(invoked).not.toContain('backend_stack_up');
+    expect(invoked).not.toContain('backend_stack_verify');
+    expect(invoked).not.toContain('backend_run_default_suite');
+    expect(output.status).not.toBe('pass');
+  });
+
   it('reports missing sections without starting component tools', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'kit-server-'));
     try {
