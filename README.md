@@ -35,6 +35,7 @@ kit release plan --plan '<JSON object>' --json
 ```
 
 Use `--root PATH` to select another project. `kit mcp` starts the stdio server. Direct MCP tools are also callable with `kit tool <MCP_TOOL_NAME> --args '<JSON object>' --json`. Status includes the backend and release gate's pending plans. A release plan must be supplied; planning does not approve or execute it.
+`kit init` creates sections for detected Android modules, resources, Maestro flows and Supabase projects. Verification still needs workflow-specific inputs such as a lease, test runner, selected flow and backend scenario; missing prerequisites are reported rather than treated as a pass.
 
 Read the [getting-started guide](docs/getting-started.md) for platform prerequisites and the [fixture walkthrough](docs/fixture.md) for a synthetic example. Run `npm run docs:dev` to browse the site locally or `npm run docs:build` to build it. Templates for configuration and CI live in [templates](templates/); configure the external tools required by the chosen scope before using them.
 

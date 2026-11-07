@@ -112,9 +112,13 @@ describe('kit CLI', () => {
         maestro: ['e2e/maestro'],
       },
     ]);
-    expect(await readFile(join(root, 'android-kit.yaml'), 'utf8')).toBe('{}\n');
+    expect(JSON.parse(await readFile(join(root, 'android-kit.yaml'), 'utf8'))).toEqual({
+      emuLab: {}, i18n: {}, maestroFlow: { flowsDir: 'e2e/maestro' }, backend: {},
+    });
     expect((await init(root)).status).toBe('blocked');
-    expect(await readFile(join(root, 'android-kit.yaml'), 'utf8')).toBe('{}\n');
+    expect(JSON.parse(await readFile(join(root, 'android-kit.yaml'), 'utf8'))).toEqual({
+      emuLab: {}, i18n: {}, maestroFlow: { flowsDir: 'e2e/maestro' }, backend: {},
+    });
   });
 
   it('detects the fixture project without modifying the checkout', async () => {
@@ -143,6 +147,9 @@ describe('kit CLI', () => {
     );
     expect(found.supabase).toContain('supabase');
     expect(found.maestro).toContain('e2e/maestro');
+    expect(JSON.parse(await readFile(join(root, 'android-kit.yaml'), 'utf8'))).toMatchObject({
+      emuLab: {}, i18n: {}, maestroFlow: { flowsDir: 'e2e/maestro' }, backend: {},
+    });
   });
 
   it('rejects malformed options and preserves JSON output and exit codes', async () => {

@@ -103,7 +103,15 @@ export async function init(projectRoot: string): Promise<Result> {
   try {
     const root = resolve(projectRoot);
     const found = await detect(root);
-    await writeFile(join(root, 'android-kit.yaml'), '{}\n', { flag: 'wx' });
+    const config: Record<string, unknown> = {};
+    if (found.modules.length) config.emuLab = {};
+    if (found.resources.length) config.i18n = {};
+    if (found.maestro.length) config.maestroFlow = { flowsDir: found.maestro[0] };
+    if (found.supabase.length === 1) {
+      const directory = found.supabase[0];
+      config.backend = directory === 'supabase' ? {} : { supabaseDir: relative(root, join(root, directory, '..')).replaceAll('\\', '/') || '.' };
+    }
+    await writeFile(join(root, 'android-kit.yaml'), `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
     return createResult({
       tool: 'kit',
       operation: 'init',
