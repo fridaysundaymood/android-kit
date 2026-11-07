@@ -45,6 +45,53 @@ async function command(args: string[]) {
 }
 
 describe('kit CLI', () => {
+  it('prints general and command help without invoking operations', async () => {
+    vi.clearAllMocks();
+    const lines: string[] = [];
+    const print = (line: string) => lines.push(line);
+    expect(await run(['--help'], print)).toBe(0);
+    for (const name of [
+      'init',
+      'status',
+      'verify',
+      'doctor',
+      'release plan',
+      'tool',
+      'mcp',
+    ]) {
+      expect(lines[0]).toContain(name);
+    }
+    for (const args of [
+      ['init'],
+      ['status'],
+      ['verify'],
+      ['doctor'],
+      ['release'],
+      ['release', 'plan'],
+      ['tool'],
+      ['mcp'],
+    ]) {
+      lines.length = 0;
+      expect(await run([...args, '--help'], print)).toBe(0);
+      expect(lines[0]).toContain(`Usage: kit ${args.join(' ')}`);
+    }
+    expect(invokeKit).not.toHaveBeenCalled();
+    expect(invokeTool).not.toHaveBeenCalled();
+    expect(runStdio).not.toHaveBeenCalled();
+    lines.length = 0;
+    expect(await run(['unknown', '--help'], print)).toBe(2);
+    expect(lines[0]).toContain('Unknown command');
+  });
+
+  it('prints the package version', async () => {
+    const lines: string[] = [];
+    const metadata = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { version: string };
+    expect(await run(['--version'], (line) => lines.push(line))).toBe(0);
+    expect(lines).toEqual([metadata.version]);
+  });
+
   it('detects a synthetic project and refuses to overwrite config', async () => {
     const root = await temporary();
     await mkdir(join(root, 'app/src/main/res/values-in'), { recursive: true });

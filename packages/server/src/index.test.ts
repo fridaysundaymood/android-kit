@@ -75,6 +75,17 @@ describe('kit orchestration', () => {
     expect(
       (output.evidence as Result[]).slice(3).map((item) => item.status),
     ).toEqual(['blocked', 'blocked', 'blocked', 'blocked']);
+    expect(
+      (output.evidence as Result[]).slice(3).map(({ tool, operation }) => ({
+        tool,
+        operation,
+      })),
+    ).toEqual([
+      { tool: 'emu-lab', operation: 'emu_lab_run_instrumentation' },
+      { tool: 'maestro-flow', operation: 'maestro_flow_run' },
+      { tool: 'backend', operation: 'backend_run_scenario' },
+      { tool: 'release', operation: 'release_plan_change' },
+    ]);
     expect(mock.calls.map((call) => call.name)).toEqual([
       'i18n_lint',
       'maestro_flow_lint',
@@ -126,9 +137,10 @@ describe('kit orchestration', () => {
   });
   it('uses component status and doctor operations', async () => {
     const mock = recorder();
+    expect(emuTools().map((tool) => tool.name)).toContain('emu_lab_status');
     await invokeKit('status', {}, mock.invoke);
     expect(mock.calls.map((call) => call.name)).toEqual([
-      'emu_lab_lab_status',
+      'emu_lab_status',
       'backend_status',
       'i18n_lint',
       'release_status',
@@ -151,6 +163,32 @@ describe('kit orchestration', () => {
       expect((output.evidence as Result[]).map((item) => item.status)).toEqual(
         Array(6).fill('unsupported'),
       );
+      expect(
+        (output.evidence as Result[]).map(({ tool, operation }) => ({
+          tool,
+          operation,
+        })),
+      ).toEqual([
+        { tool: 'i18n', operation: 'i18n_lint' },
+        { tool: 'maestro-flow', operation: 'maestro_flow_lint' },
+        { tool: 'emu-lab', operation: 'emu_lab_build' },
+        { tool: 'emu-lab', operation: 'emu_lab_run_instrumentation' },
+        { tool: 'maestro-flow', operation: 'maestro_flow_run' },
+        { tool: 'backend', operation: 'backend_run_scenario' },
+      ]);
+      const status = await invokeKit('status', { projectRoot });
+      expect(
+        (status.evidence as Result[]).map(({ tool, operation, status }) => ({
+          tool,
+          operation,
+          status,
+        })),
+      ).toEqual([
+        { tool: 'emu-lab', operation: 'emu_lab_status', status: 'unsupported' },
+        { tool: 'backend', operation: 'backend_status', status: 'unsupported' },
+        { tool: 'i18n', operation: 'i18n_lint', status: 'unsupported' },
+        { tool: 'release', operation: 'release_status', status: 'unsupported' },
+      ]);
       await writeFile(
         join(projectRoot, 'android-kit.yaml'),
         'emuLab:\\n  unexpected: true\\n',
@@ -171,7 +209,7 @@ describe('kit orchestration', () => {
     } finally {
       await rm(projectRoot, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
   it('validates the i18n section with its public schema', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'kit-i18n-'));
     try {

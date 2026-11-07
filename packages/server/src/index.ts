@@ -220,7 +220,13 @@ export async function invokeKit(
       const reason = missing ? `Missing ${section} configuration` : skipped;
       const result = reason
         ? createResult({
-            tool: 'kit',
+            tool: {
+              emuLab: 'emu-lab',
+              maestroFlow: 'maestro-flow',
+              backend: 'backend',
+              i18n: 'i18n',
+              releaseGate: 'release',
+            }[section],
             operation: name,
             run_id: newRunId(),
             status: missing ? 'unsupported' : 'blocked',
@@ -235,7 +241,7 @@ export async function invokeKit(
       return result.status === 'pass';
     };
     if (operation === 'status') {
-      await call('emu_lab_lab_status');
+      await call('emu_lab_status');
       await call('backend_status');
       await call('i18n_lint', object(args.i18n));
       await call('release_status');

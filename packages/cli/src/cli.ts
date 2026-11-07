@@ -1,4 +1,4 @@
-import { readdir, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import {
   createResult,
@@ -23,6 +23,35 @@ const ignored: Record<string, true> = {
   node_modules: true,
   build: true,
   dist: true,
+};
+
+const usage = `Usage: kit <command> [options]
+
+Commands:
+  init           Detect a project and create its configuration
+  status         Show project status
+  verify         Run verification
+  doctor         Diagnose the project environment
+  release plan   Assess release readiness
+  tool <name>    Invoke an MCP tool
+  mcp            Run the MCP server over stdio
+
+Options:
+  --help         Show help
+  --version      Show version
+
+Run kit <command> --help for command options.`;
+
+const commandUsage: Record<string, string> = {
+  init: 'Usage: kit init [--root <path>] [--json]',
+  status: 'Usage: kit status [--root <path>] [--args <json>] [--json]',
+  verify:
+    'Usage: kit verify [--root <path>] [--scope <all|device|backend|lint>] [--args <json>] [--json]',
+  doctor: 'Usage: kit doctor [--root <path>] [--args <json>] [--json]',
+  release:
+    'Usage: kit release plan [--root <path>] [--scope <all|device|backend|lint>] [--plan <json>] [--args <json>] [--json]',
+  tool: 'Usage: kit tool <name> [--root <path>] [--args <json>] [--json]',
+  mcp: 'Usage: kit mcp\n\nRun the MCP server over stdio.',
 };
 
 async function detect(root: string): Promise<{
@@ -120,6 +149,27 @@ export async function run(
   const startedAt = new Date();
   let operation = 'cli';
   try {
+    if (argv.length === 1 && argv[0] === '--version') {
+      const metadata = JSON.parse(
+        await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+      ) as { version: string };
+      output(metadata.version);
+      return 0;
+    }
+    if (argv.length === 1 && argv[0] === '--help') {
+      output(usage);
+      return 0;
+    }
+    if (
+      argv.at(-1) === '--help' &&
+      (argv.length === 2 ||
+        (argv.length === 3 && argv[0] === 'release' && argv[1] === 'plan'))
+    ) {
+      const help = commandUsage[argv[0]];
+      if (!help) throw new Error(`Unknown command ${argv[0]}`);
+      output(help);
+      return 0;
+    }
     const positional: string[] = [];
     const options: Record<string, string> = {};
     let json = false;
