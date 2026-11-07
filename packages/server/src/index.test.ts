@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { toolDefinitions as emuTools } from '@android-kit/emu-lab';
@@ -24,100 +24,159 @@ function result(name: string, status: Status = 'pass'): Result {
     startedAt: new Date(),
   });
 }
-function recorder(fail?: string) {
+function recorder(fail?: string, running = false, unsupported?: string) {
   const calls: { name: string; args: Record<string, unknown> }[] = [];
   return {
     calls,
     invoke: async (name: string, args: Record<string, unknown> = {}) => {
       calls.push({ name, args });
-      return result(name, name === fail ? 'fail' : 'pass');
+      const output = result(
+        name,
+        name === fail ? 'fail' : name === unsupported ? 'unsupported' : 'pass',
+      );
+      if (name === 'emu_lab_build')
+        output.artifacts.push('app.apk', 'androidTest.apk');
+      if (name === 'emu_lab_lease_device')
+        output.evidence.push({ leaseId: 'lease-1' });
+      if (name === 'backend_status') output.evidence.push({ running });
+      return output;
     },
   };
 }
 describe('kit orchestration', () => {
-  it('runs verification in order, forwarding stage options', async () => {
+  it('runs device and backend lifecycle in order and releases owned resources', async () => {
     const mock = recorder();
     const output = await invokeKit(
       'verify',
       {
-        projectRoot: '/project',
         build: { variant: 'debug' },
-        instrumentation: { leaseId: 'lease' },
+        instrumentation: {
+          packageName: 'dev.example',
+          runner: 'dev.example.test/Runner',
+        },
         maestro: { flow: 'flow.yaml' },
         backend: { file: 'scenario.yaml' },
       },
       mock.invoke,
     );
     expect(output.status).toBe('pass');
-    expect(mock.calls.map((call) => call.name)).toEqual([
+    expect(mock.calls.map(({ name }) => name)).toEqual([
       'i18n_lint',
       'maestro_flow_lint',
       'emu_lab_build',
+      'emu_lab_lease_device',
       'emu_lab_run_instrumentation',
       'maestro_flow_run',
+      'emu_lab_release_device',
+      'backend_status',
+      'backend_stack_up',
+      'backend_stack_verify',
       'backend_run_scenario',
+      'backend_stack_down',
     ]);
-    expect(mock.calls[2].args).toEqual({
-      projectRoot: '/project',
-      variant: 'debug',
-    });
-    expect(output.evidence).toHaveLength(6);
+    expect(
+      mock.calls.find(({ name }) => name === 'emu_lab_release_device')?.args
+        .leaseId,
+    ).toBe('lease-1');
+    expect(
+      mock.calls.find(({ name }) => name === 'maestro_flow_run')?.args.emuLab,
+    ).toEqual(expect.objectContaining({ leaseId: 'lease-1' }));
   });
-  it('stops after a failed prerequisite and does not plan a release', async () => {
-    const mock = recorder('emu_lab_build');
+  it('releases a lease after instrumentation failure', async () => {
+    const mock = recorder('emu_lab_run_instrumentation');
     const output = await invokeKit(
-      'release_readiness',
-      { plan: { provider: 'supabase' } },
+      'verify',
+      {
+        scope: 'device',
+        build: { variant: 'debug' },
+        instrumentation: {
+          packageName: 'dev.example',
+          runner: 'dev.example.test/Runner',
+        },
+        maestro: { flow: 'flow.yaml' },
+      },
       mock.invoke,
     );
     expect(output.status).toBe('fail');
-    expect(output.evidence).toHaveLength(7);
+    expect(mock.calls.at(-1)?.name).toBe('emu_lab_release_device');
+  });
+  it('runs every discovered flow even if one fails, then releases the lease', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'kit-flows-'));
+    try {
+      await mkdir(join(projectRoot, 'flows'));
+      await writeFile(join(projectRoot, 'flows', 'a.yaml'), 'appId: example');
+      await writeFile(join(projectRoot, 'flows', 'b.yaml'), 'appId: example');
+      const mock = recorder('maestro_flow_run');
+      const output = await invokeKit(
+        'verify',
+        {
+          projectRoot,
+          scope: 'device',
+          build: { variant: 'debug' },
+          instrumentation: {
+            packageName: 'dev.example',
+            runner: 'dev.example.test/Runner',
+          },
+          maestro: { flowsDir: 'flows' },
+        },
+        mock.invoke,
+      );
+      expect(output.status).toBe('fail');
+      expect(
+        mock.calls.filter(({ name }) => name === 'maestro_flow_run'),
+      ).toHaveLength(2);
+      expect(mock.calls.at(-1)?.name).toBe('emu_lab_release_device');
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+  it('derives literal Gradle instrumentation settings for a fixture', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'kit-gradle-'));
+    try {
+      await mkdir(join(projectRoot, 'app'));
+      await writeFile(
+        join(projectRoot, 'app', 'build.gradle.kts'),
+        'android { defaultConfig { applicationId = "dev.example"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" } }',
+      );
+      const mock = recorder();
+      const output = await invokeKit(
+        'verify',
+        {
+          projectRoot,
+          scope: 'device',
+          build: { variant: 'debug' },
+          maestro: { flow: 'flow.yaml' },
+        },
+        mock.invoke,
+      );
+      expect(output.status).toBe('pass');
+      expect(
+        mock.calls.find(({ name }) => name === 'emu_lab_run_instrumentation')
+          ?.args,
+      ).toEqual(
+        expect.objectContaining({
+          packageName: 'dev.example',
+          runner: 'dev.example.test/androidx.test.runner.AndroidJUnitRunner',
+        }),
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+  it('stops a started stack on failure and reports unsupported absent suite', async () => {
+    const mock = recorder('backend_stack_verify');
     expect(
-      (output.evidence as Result[]).slice(3).map((item) => item.status),
-    ).toEqual(['blocked', 'blocked', 'blocked', 'blocked']);
+      (await invokeKit('verify', { scope: 'backend' }, mock.invoke)).status,
+    ).toBe('fail');
+    expect(mock.calls.at(-1)?.name).toBe('backend_stack_down');
+    const other = recorder(undefined, false, 'backend_run_attacks');
     expect(
-      (output.evidence as Result[]).slice(3).map(({ tool, operation }) => ({
-        tool,
-        operation,
-      })),
-    ).toEqual([
-      { tool: 'emu-lab', operation: 'emu_lab_run_instrumentation' },
-      { tool: 'maestro-flow', operation: 'maestro_flow_run' },
-      { tool: 'backend', operation: 'backend_run_scenario' },
-      { tool: 'release', operation: 'release_plan_change' },
-    ]);
-    expect(mock.calls.map((call) => call.name)).toEqual([
-      'i18n_lint',
-      'maestro_flow_lint',
-      'emu_lab_build',
-    ]);
+      (await invokeKit('verify', { scope: 'backend' }, other.invoke)).status,
+    ).toBe('unsupported');
+    expect(other.calls.at(-1)?.name).toBe('backend_stack_down');
   });
-  it('prepares a plan only after verification, never executes it', async () => {
-    const mock = recorder();
-    const output = await invokeKit(
-      'release_readiness',
-      { plan: { provider: 'play' } },
-      mock.invoke,
-    );
-    expect(output.status).toBe('pass');
-    expect(mock.calls.at(-1)).toEqual({
-      name: 'release_plan_change',
-      args: { projectRoot: undefined, plan: { provider: 'play' } },
-    });
-    expect(mock.calls.some((call) => call.name === 'release_execute')).toBe(
-      false,
-    );
-  });
-  it('blocks readiness without a plan', async () => {
-    const mock = recorder();
-    const output = await invokeKit('release_readiness', {}, mock.invoke);
-    expect(output.status).toBe('blocked');
-    expect(mock.calls.some((call) => call.name === 'release_plan_change')).toBe(
-      false,
-    );
-  });
-  it('respects scope and rejects unknown scopes', async () => {
-    const mock = recorder();
+  it('does not stop an already running stack', async () => {
+    const mock = recorder(undefined, true);
     expect(
       (
         await invokeKit(
@@ -127,12 +186,21 @@ describe('kit orchestration', () => {
         )
       ).status,
     ).toBe('pass');
-    expect(mock.calls.map((call) => call.name)).toEqual([
+    expect(mock.calls.map(({ name }) => name)).toEqual([
+      'backend_status',
+      'backend_stack_verify',
       'backend_run_scenario',
     ]);
+  });
+  it('rejects unknown scopes', async () => {
     expect(
-      (await invokeKit('verify', { scope: 'invalid' as 'all' }, mock.invoke))
-        .status,
+      (
+        await invokeKit(
+          'verify',
+          { scope: 'invalid' as 'all' },
+          recorder().invoke,
+        )
+      ).status,
     ).toBe('error');
   });
   it('uses component status and doctor operations', async () => {
@@ -160,22 +228,14 @@ describe('kit orchestration', () => {
     try {
       const output = await invokeKit('verify', { projectRoot });
       expect(output.status).toBe('unsupported');
-      expect((output.evidence as Result[]).map((item) => item.status)).toEqual(
-        Array(6).fill('unsupported'),
+      expect(output.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'maestro_flow_lint',
+            status: 'unsupported',
+          }),
+        ]),
       );
-      expect(
-        (output.evidence as Result[]).map(({ tool, operation }) => ({
-          tool,
-          operation,
-        })),
-      ).toEqual([
-        { tool: 'i18n', operation: 'i18n_lint' },
-        { tool: 'maestro-flow', operation: 'maestro_flow_lint' },
-        { tool: 'emu-lab', operation: 'emu_lab_build' },
-        { tool: 'emu-lab', operation: 'emu_lab_run_instrumentation' },
-        { tool: 'maestro-flow', operation: 'maestro_flow_run' },
-        { tool: 'backend', operation: 'backend_run_scenario' },
-      ]);
       const status = await invokeKit('status', { projectRoot });
       expect(
         (status.evidence as Result[]).map(({ tool, operation, status }) => ({

@@ -43,6 +43,25 @@ async function command(args: string[]) {
   const code = await run([...args, '--json'], (line) => lines.push(line));
   return { code, result: JSON.parse(lines.join('\n')) };
 }
+async function config(root: string) {
+  return JSON.parse(
+    (await readFile(join(root, 'android-kit.yaml'), 'utf8')).replace(
+      /^#[^\n]*\n/gm,
+      '',
+    ),
+  );
+}
+
+const profile = {
+  image: 'system-images;android-36;google_apis_playstore;x86_64',
+  api: 36,
+  ramMb: 2048,
+  cores: 4,
+  gpu: 'host',
+  root: false,
+  locale: 'en-US',
+  density: 420,
+};
 
 describe('kit CLI', () => {
   it('prints general and command help without invoking operations', async () => {
@@ -110,14 +129,32 @@ describe('kit CLI', () => {
         resources: ['app/src/main/res/values-in/strings.xml'],
         supabase: ['supabase'],
         maestro: ['e2e/maestro'],
+        flavors: [],
+        variants: ['debug', 'release'],
       },
     ]);
-    expect(JSON.parse(await readFile(join(root, 'android-kit.yaml'), 'utf8'))).toEqual({
-      emuLab: {}, i18n: {}, maestroFlow: { flowsDir: 'e2e/maestro' }, backend: {},
-    });
+    const expected = {
+      emuLab: { build: { variant: 'debug' }, profiles: { default: profile } },
+      i18n: { locales: ['in'] },
+      maestroFlow: { flowsDir: 'e2e/maestro' },
+      backend: { supabaseDir: '.' },
+    };
+    expect(await config(root)).toEqual(expected);
     expect((await init(root)).status).toBe('blocked');
-    expect(JSON.parse(await readFile(join(root, 'android-kit.yaml'), 'utf8'))).toEqual({
-      emuLab: {}, i18n: {}, maestroFlow: { flowsDir: 'e2e/maestro' }, backend: {},
+    expect(await config(root)).toEqual(expected);
+  });
+
+  it('only configures detected locales and a single Supabase project', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'app/src/main/res/values'), { recursive: true });
+    await mkdir(join(root, 'services/api/supabase'), { recursive: true });
+    await writeFile(
+      join(root, 'app/src/main/res/values/strings.xml'),
+      '<resources/>',
+    );
+    expect((await init(root)).status).toBe('pass');
+    expect(await config(root)).toEqual({
+      backend: { supabaseDir: 'services/api' },
     });
   });
 
@@ -147,9 +184,26 @@ describe('kit CLI', () => {
     );
     expect(found.supabase).toContain('supabase');
     expect(found.maestro).toContain('e2e/maestro');
-    expect(JSON.parse(await readFile(join(root, 'android-kit.yaml'), 'utf8'))).toMatchObject({
-      emuLab: {}, i18n: {}, maestroFlow: { flowsDir: 'e2e/maestro' }, backend: {},
+    expect(await config(root)).toMatchObject({
+      emuLab: {
+        build: { variant: 'cleanDebug' },
+        profiles: { default: profile },
+      },
+      maestroFlow: { flowsDir: 'e2e/maestro' },
+      backend: { supabaseDir: '.' },
     });
+    expect(result.evidence[0]).toMatchObject({
+      flavors: ['clean', 'defects'],
+      variants: [
+        'cleanDebug',
+        'cleanRelease',
+        'defectsDebug',
+        'defectsRelease',
+      ],
+    });
+    expect(await readFile(join(root, 'android-kit.yaml'), 'utf8')).toContain(
+      '# Detected Gradle variants: cleanDebug',
+    );
   });
 
   it('rejects malformed options and preserves JSON output and exit codes', async () => {

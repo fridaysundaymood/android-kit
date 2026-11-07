@@ -59,11 +59,15 @@ async function detect(root: string): Promise<{
   resources: string[];
   supabase: string[];
   maestro: string[];
+  flavors: string[];
+  variants: string[];
 }> {
   const modules: string[] = [];
   const resources: string[] = [];
   const supabase: string[] = [];
   const maestro: string[] = [];
+  const flavors = new Set<string>();
+  const buildTypes = new Set(['debug', 'release']);
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
@@ -78,8 +82,26 @@ async function detect(root: string): Promise<{
         }
         await walk(path);
       } else if (entry.isFile()) {
-        if (entry.name === 'build.gradle' || entry.name === 'build.gradle.kts')
+        if (
+          entry.name === 'build.gradle' ||
+          entry.name === 'build.gradle.kts'
+        ) {
           modules.push(relative(root, dir).replaceAll('\\', '/') || '.');
+          const source = await readFile(path, 'utf8');
+          for (const [section, names] of [
+            ['productFlavors', flavors],
+            ['buildTypes', buildTypes],
+          ] as const) {
+            const block = source.match(
+              new RegExp(`\\b${section}\\s*\\{([\\s\\S]*?)(?:\\n\\s*\\}|$)`),
+            )?.[1];
+            if (!block) continue;
+            for (const match of block.matchAll(
+              /(?:create|maybeCreate|register)\s*\(\s*["']([\w-]+)["']\s*\)|^\s*([A-Za-z_][\w-]*)\s*\{/gm,
+            ))
+              names.add(match[1] ?? match[2]!);
+          }
+        }
         if (
           /^strings[^/]*\.xml$/.test(entry.name) &&
           /(?:^|\/)res\/values(?:-[^/]+)?\//.test(rel)
@@ -94,6 +116,17 @@ async function detect(root: string): Promise<{
     resources: resources.sort(),
     supabase: supabase.sort(),
     maestro: maestro.sort(),
+    flavors: [...flavors].sort(),
+    variants: (flavors.size
+      ? [...flavors].flatMap((flavor) =>
+          [...buildTypes].map(
+            (type) => flavor + type[0]!.toUpperCase() + type.slice(1),
+          ),
+        )
+      : modules.length
+        ? [...buildTypes]
+        : []
+    ).sort(),
   };
 }
 
@@ -104,14 +137,57 @@ export async function init(projectRoot: string): Promise<Result> {
     const root = resolve(projectRoot);
     const found = await detect(root);
     const config: Record<string, unknown> = {};
-    if (found.modules.length) config.emuLab = {};
-    if (found.resources.length) config.i18n = {};
-    if (found.maestro.length) config.maestroFlow = { flowsDir: found.maestro[0] };
+    if (found.modules.length)
+      config.emuLab = {
+        build: {
+          variant:
+            found.variants.find((variant) => /debug$/i.test(variant)) ??
+            'debug',
+        },
+        profiles: {
+          default: {
+            image: 'system-images;android-36;google_apis_playstore;x86_64',
+            api: 36,
+            ramMb: 2048,
+            cores: 4,
+            gpu: 'host',
+            root: false,
+            locale: 'en-US',
+            density: 420,
+          },
+        },
+      };
+    const locales = [
+      ...new Set(
+        found.resources.flatMap((path) => {
+          const qualifier = path.match(
+            /\/values-([a-z]{2,3})(?:-r([A-Z]{2}|\d{3}))?(?:-|\/)/,
+          );
+          return qualifier
+            ? [qualifier[2] ? `${qualifier[1]}-${qualifier[2]}` : qualifier[1]!]
+            : [];
+        }),
+      ),
+    ].sort();
+    if (locales.length) config.i18n = { locales };
+    if (found.maestro.length)
+      config.maestroFlow = { flowsDir: found.maestro[0] };
     if (found.supabase.length === 1) {
       const directory = found.supabase[0];
-      config.backend = directory === 'supabase' ? {} : { supabaseDir: relative(root, join(root, directory, '..')).replaceAll('\\', '/') || '.' };
+      config.backend = {
+        supabaseDir:
+          relative(root, join(root, directory, '..')).replaceAll('\\', '/') ||
+          '.',
+      };
     }
-    await writeFile(join(root, 'android-kit.yaml'), `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
+    const variants = found.variants.length
+      ? `# Detected Gradle variants: ${found.variants.join(', ')}\n`
+      : '';
+    await writeFile(
+      join(root, 'android-kit.yaml'),
+      `${variants}${JSON.stringify(config, null, 2)}\n`,
+      { flag: 'wx' },
+    );
     return createResult({
       tool: 'kit',
       operation: 'init',

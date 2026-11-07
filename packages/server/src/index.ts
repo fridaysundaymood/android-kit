@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import * as emu from '@android-kit/emu-lab';
@@ -238,7 +238,7 @@ export async function invokeKit(
           })
         : await invoke(name, { ...root, ...options });
       results.push(result);
-      return result.status === 'pass';
+      return result;
     };
     if (operation === 'status') {
       await call('emu_lab_status');
@@ -255,32 +255,323 @@ export async function invokeKit(
       ])
         await call(name);
     } else {
-      const steps: [string, Record<string, unknown>][] = [];
-      if (scope === 'all' || scope === 'lint' || scope === 'device')
-        steps.push(
-          ['i18n_lint', object(args.i18n)],
-          ['maestro_flow_lint', object(args.maestro)],
-        );
-      if (scope === 'all' || scope === 'device')
-        steps.push(
-          ['emu_lab_build', object(args.build)],
-          ['emu_lab_run_instrumentation', object(args.instrumentation)],
-          ['maestro_flow_run', object(args.maestro)],
-        );
-      if (scope === 'all' || scope === 'backend')
-        steps.push(['backend_run_scenario', object(args.backend)]);
-      if (operation === 'release_readiness')
-        steps.push(['release_plan_change', { plan: args.plan }]);
+      const rootPath = args.projectRoot ?? process.cwd();
+      const maestroOptions = object(args.maestro);
+      const maestroConfig = object(sections?.maestroFlow);
+      const emuConfig = object(sections?.emuLab);
+      const instrumentation = object(args.instrumentation);
+      const backendOptions = object(args.backend);
       let blockedBy: string | undefined;
-      for (const [name, options] of steps) {
-        const reason = blockedBy
-          ? `Not run because ${blockedBy} did not pass`
-          : name === 'release_plan_change' && !args.plan
-            ? 'A release plan is required'
-            : undefined;
-        if (!(await call(name, options, reason)) && !blockedBy)
-          blockedBy = name;
+      const step = async (
+        name: string,
+        options: Record<string, unknown> = {},
+      ) => {
+        const result = await call(
+          name,
+          options,
+          blockedBy && `Not run because ${blockedBy} did not pass`,
+        );
+        if (result.status !== 'pass' && !blockedBy) blockedBy = name;
+        return result;
+      };
+      const note = (name: string, status: Status, summary: string) => {
+        const result = createResult({
+          tool: 'kit',
+          operation: name,
+          run_id: newRunId(),
+          status,
+          classification: 'config',
+          summary,
+          evidence: [],
+          artifacts: [],
+          startedAt,
+        });
+        results.push(result);
+        if (status !== 'pass' && !blockedBy) blockedBy = name;
+      };
+      let flows: string[] = [];
+      if (scope === 'all' || scope === 'lint' || scope === 'device') {
+        if (!sections || 'i18n' in sections || args.i18n)
+          await step('i18n_lint', object(args.i18n));
+        const selected = maestroOptions.flow ?? maestroConfig.flow;
+        const findFlows = async (directory: string): Promise<string[]> => {
+          const entries = await readdir(directory, { withFileTypes: true });
+          const paths = await Promise.all(
+            entries.map((entry) =>
+              entry.isDirectory()
+                ? findFlows(resolve(directory, entry.name))
+                : Promise.resolve(
+                    entry.isFile() && /\.ya?ml$/i.test(entry.name)
+                      ? [resolve(directory, entry.name)]
+                      : [],
+                  ),
+            ),
+          );
+          return paths.flat().sort();
+        };
+        if (!blockedBy && sections && !('maestroFlow' in sections))
+          await step('maestro_flow_lint');
+        if (!blockedBy) {
+          try {
+            flows =
+              typeof selected === 'string'
+                ? [selected]
+                : await findFlows(
+                    resolve(
+                      rootPath,
+                      String(
+                        maestroOptions.flowsDir ??
+                          maestroConfig.flowsDir ??
+                          'e2e/maestro',
+                      ),
+                    ),
+                  );
+            if (!flows.length)
+              note(
+                'maestro_flow_lint',
+                'blocked',
+                'No Maestro YAML flows found; set maestro.flowsDir or maestro.flow.',
+              );
+          } catch (error) {
+            note(
+              'maestro_flow_lint',
+              'blocked',
+              `Cannot find Maestro flows: ${error instanceof Error ? error.message : String(error)}. Set maestro.flowsDir or maestro.flow.`,
+            );
+          }
+        }
+        if (
+          blockedBy &&
+          !flows.length &&
+          !(sections && !('maestroFlow' in sections))
+        )
+          await step('maestro_flow_lint', maestroOptions);
+        for (const flow of flows) {
+          const result = await call(
+            'maestro_flow_lint',
+            { ...maestroOptions, flow },
+            blockedBy && `Not run because ${blockedBy} did not pass`,
+          );
+          if (result.status !== 'pass' && !blockedBy)
+            blockedBy = 'maestro_flow_lint';
+        }
       }
+      if (scope === 'all' || scope === 'device') {
+        const buildOptions = {
+          ...object(emuConfig.build),
+          ...object(args.build),
+        };
+        if (!blockedBy && typeof buildOptions.variant !== 'string')
+          note(
+            'emu_lab_build',
+            'blocked',
+            'Set build.variant to the Gradle variant to verify, for example debug.',
+          );
+        const build = await step('emu_lab_build', buildOptions);
+        const apk =
+          typeof instrumentation.apk === 'string'
+            ? instrumentation.apk
+            : build?.artifacts.find(
+                (path) => /\.apk$/i.test(path) && !/androidtest/i.test(path),
+              );
+        const testApk =
+          typeof instrumentation.testApk === 'string'
+            ? instrumentation.testApk
+            : build?.artifacts.find(
+                (path) => /\.apk$/i.test(path) && /androidtest/i.test(path),
+              );
+        let packageName =
+          instrumentation.packageName ??
+          maestroOptions.appId ??
+          maestroConfig.appId;
+        let runner = instrumentation.runner;
+        if (typeof packageName !== 'string' || typeof runner !== 'string') {
+          const module =
+            typeof buildOptions.module === 'string'
+              ? buildOptions.module
+              : 'app';
+          let gradle = '';
+          for (const file of ['build.gradle.kts', 'build.gradle']) {
+            try {
+              gradle = await readFile(resolve(rootPath, module, file), 'utf8');
+              break;
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+                throw error;
+            }
+          }
+          const literal = (key: string) => {
+            const matches = [
+              ...gradle.matchAll(
+                new RegExp(`\\b${key}\\s*(?:=\\s*)?["']([^"'$]+)["']`, 'g'),
+              ),
+            ];
+            return matches.length === 1 ? matches[0]?.[1] : undefined;
+          };
+          const applicationId = !/\bapplicationIdSuffix\b/.test(gradle)
+            ? literal('applicationId')
+            : undefined;
+          if (typeof packageName !== 'string') packageName = applicationId;
+          const runnerClass = literal('testInstrumentationRunner');
+          const testPackage = /\btestApplicationId\b/.test(gradle)
+            ? literal('testApplicationId')
+            : applicationId
+              ? `${applicationId}.test`
+              : undefined;
+          if (typeof runner !== 'string' && runnerClass && testPackage)
+            runner = `${testPackage}/${runnerClass}`;
+        }
+        if (
+          !blockedBy &&
+          (!apk ||
+            !testApk ||
+            typeof packageName !== 'string' ||
+            typeof runner !== 'string')
+        )
+          note(
+            'emu_lab_run_instrumentation',
+            'blocked',
+            'Provide instrumentation.packageName and instrumentation.runner (test package/runner), and build both app and androidTest APKs or set instrumentation.apk and testApk. Dynamic or variant-specific Gradle values require explicit arguments.',
+          );
+        let leaseId: string | undefined;
+        try {
+          if (!blockedBy) {
+            const lease = await step(
+              'emu_lab_lease_device',
+              object(args.lease),
+            );
+            const value = object(lease.evidence[0]).leaseId;
+            if (lease.status === 'pass' && typeof value === 'string' && value)
+              leaseId = value;
+            else if (lease.status === 'pass')
+              note(
+                'emu_lab_lease_device',
+                'error',
+                'Device lease response did not include a leaseId; cannot safely run or release it.',
+              );
+          }
+          if (leaseId) {
+            await step('emu_lab_run_instrumentation', {
+              ...instrumentation,
+              apk: resolve(rootPath, String(apk)),
+              testApk: resolve(rootPath, String(testApk)),
+              packageName,
+              runner,
+              leaseId,
+            });
+            if (!blockedBy) {
+              for (const flow of flows) {
+                const result = await call('maestro_flow_run', {
+                  ...maestroOptions,
+                  flow,
+                  suite: true,
+                  emuLab: {
+                    databasePath:
+                      emuConfig.databasePath ?? '.android-kit/emu-lab.sqlite',
+                    leaseId,
+                    packageName,
+                  },
+                });
+                if (result.status !== 'pass' && !blockedBy)
+                  blockedBy = 'maestro_flow_run';
+              }
+            }
+          }
+        } finally {
+          if (leaseId) {
+            const released = await call('emu_lab_release_device', { leaseId });
+            if (released.status !== 'pass' && !blockedBy)
+              blockedBy = 'emu_lab_release_device';
+          }
+        }
+        if (!leaseId && blockedBy) {
+          if (
+            !results.some((item) => item.operation === 'emu_lab_lease_device')
+          )
+            await step('emu_lab_lease_device', object(args.lease));
+          if (
+            !results.some(
+              (item) => item.operation === 'emu_lab_run_instrumentation',
+            )
+          )
+            await step('emu_lab_run_instrumentation', instrumentation);
+          await step('maestro_flow_run', maestroOptions);
+        } else if (
+          leaseId &&
+          blockedBy &&
+          !results.some((item) => item.operation === 'maestro_flow_run')
+        ) {
+          await step('maestro_flow_run', maestroOptions);
+        }
+      }
+      if (scope === 'all' || scope === 'backend') {
+        if (!blockedBy) {
+          const status = await step('backend_status');
+          const running = object(status.evidence[0]).running;
+          if (status.status === 'pass' && typeof running !== 'boolean')
+            note(
+              'backend_status',
+              'unsupported',
+              'Backend status did not report whether the local stack is running.',
+            );
+          let started = false;
+          try {
+            if (!blockedBy && !running) {
+              const up = await step('backend_stack_up');
+              started = up.status === 'pass';
+              if (started)
+                results.push(
+                  createResult({
+                    tool: 'kit',
+                    operation: 'backend_ownership',
+                    run_id: newRunId(),
+                    status: 'pass',
+                    summary:
+                      'Stack was stopped at preflight; backend API has no atomic ownership token, so concurrent starts can race.',
+                    evidence: [],
+                    artifacts: [],
+                    startedAt,
+                  }),
+                );
+            }
+            if (!blockedBy) await step('backend_stack_verify');
+            if (typeof backendOptions.file === 'string')
+              await step('backend_run_scenario', backendOptions);
+            else if (
+              blockedBy ||
+              componentByName.has('backend_run_default_suite')
+            )
+              await step('backend_run_default_suite', backendOptions);
+            else
+              note(
+                'backend_run_default_suite',
+                'unsupported',
+                'Default backend suite unavailable in installed harness version.',
+              );
+          } finally {
+            if (started) await call('backend_stack_down');
+          }
+        } else {
+          await step('backend_status');
+          await step('backend_stack_verify');
+          await step(
+            typeof backendOptions.file === 'string'
+              ? 'backend_run_scenario'
+              : 'backend_run_default_suite',
+            backendOptions,
+          );
+        }
+      }
+      if (operation === 'release_readiness')
+        await call(
+          'release_plan_change',
+          { plan: args.plan },
+          blockedBy
+            ? `Not run because ${blockedBy} did not pass`
+            : !args.plan
+              ? 'A release plan is required'
+              : undefined,
+        );
     }
     const status = results.reduce<Status>(
       (worst, result) =>

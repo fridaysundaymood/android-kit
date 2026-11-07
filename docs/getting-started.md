@@ -23,7 +23,7 @@ kit verify --json
 kit release plan --plan '<JSON object>' --json
 ```
 
-Use `--root PATH` when operating on a different project. `kit verify --scope SCOPE --json` selects a verification scope. `kit mcp` starts the stdio MCP server; configure an MCP client to launch it as a command, without mixing diagnostic output into its protocol stream. The kit does not install SDKs, start devices, or start a backend merely by being installed. Read `doctor` output for missing prerequisites before starting a requested operation.
+Use `--root PATH` when operating on a different project. Review the detected settings in `android-kit.yaml` after `kit init`; an existing config is not overwritten. `kit verify --scope SCOPE --json` selects a verification scope. `kit mcp` starts the stdio MCP server; configure an MCP client to launch it as a command, without mixing diagnostic output into its protocol stream. Installation alone does not install SDKs or start devices or a backend. Read `doctor` output for missing prerequisites before starting a requested operation.
 
 The MCP Inspector CLI has been used against `kit mcp` to list the tools and call `kit_status`. The automated compatibility test also starts the built CLI over stdio with the official MCP SDK client, lists its tools, and calls `kit_doctor`. Run `npm run build` before `npm test` so that the test exercises the built entry point.
 
