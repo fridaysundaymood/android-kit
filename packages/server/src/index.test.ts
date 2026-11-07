@@ -80,7 +80,12 @@ describe('kit orchestration', () => {
     ).toBe('lease-1');
     expect(
       mock.calls.find(({ name }) => name === 'maestro_flow_run')?.args.emuLab,
-    ).toEqual(expect.objectContaining({ leaseId: 'lease-1' }));
+    ).toEqual(
+      expect.objectContaining({
+        leaseId: 'lease-1',
+        databasePath: join(process.cwd(), '.android-kit', 'emu-lab.sqlite'),
+      }),
+    );
   });
   it('releases a lease after instrumentation failure', async () => {
     const mock = recorder('emu_lab_run_instrumentation');
@@ -122,6 +127,13 @@ describe('kit orchestration', () => {
         mock.invoke,
       );
       expect(output.status).toBe('fail');
+      expect(
+        mock.calls.find(({ name }) => name === 'maestro_flow_run')?.args.emuLab,
+      ).toEqual(
+        expect.objectContaining({
+          databasePath: join(projectRoot, '.android-kit', 'emu-lab.sqlite'),
+        }),
+      );
       expect(
         mock.calls.filter(({ name }) => name === 'maestro_flow_run'),
       ).toHaveLength(2);

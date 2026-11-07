@@ -483,7 +483,9 @@ export async function invokeKit(
                 suite: true,
                 emuLab: {
                   databasePath:
-                    emuConfig.databasePath ?? '.android-kit/emu-lab.sqlite',
+                    typeof emuConfig.databasePath === 'string'
+                      ? resolve(emuConfig.databasePath)
+                      : resolve(rootPath, '.android-kit/emu-lab.sqlite'),
                   leaseId,
                   packageName,
                 },
