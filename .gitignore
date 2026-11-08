@@ -1,4 +1,13 @@
 node_modules/
+.android-kit/
+.kotlin/
+.idea/
+.vscode/
+*.jks
+*.keystore
+*.pem
+*.p12
+.env*
 dist/
 .vitepress/cache/
 coverage/

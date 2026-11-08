@@ -5,8 +5,8 @@ import {
   exitCodeFor,
   newRunId,
   type Result,
-} from '@android-kit/schema';
-import { invokeKit, invokeTool, runStdio } from '@android-kit/server';
+} from '@budaknyenyel/kit-schema';
+import { invokeKit, invokeTool, runStdio } from '@budaknyenyel/kit-server';
 
 type Scope = 'all' | 'device' | 'backend' | 'lint';
 const scopes: Record<string, true> = {
@@ -49,9 +49,9 @@ const commandUsage: Record<string, string> = {
     'Usage: kit verify [--root <path>] [--scope <all|device|backend|lint>] [--fail-fast] [--args <json>] [--json]',
   doctor: 'Usage: kit doctor [--root <path>] [--args <json>] [--json]',
   release:
-    'Usage: kit release plan [--root <path>] [--scope <all|device|backend|lint>] [--plan <json>] [--args <json>] [--json]',
-  tool: 'Usage: kit tool <name> [--root <path>] [--args <json>] [--json]',
-  mcp: 'Usage: kit mcp\n\nRun the MCP server over stdio.',
+    'Usage: kit release plan [--root <path>] [--config <path>] [--scope <all|device|backend|lint>] [--plan <json>] [--args <json>] [--json]',
+  tool: 'Usage: kit tool <name> [--root <path>] [--config <path>] [--args <json>] [--json]',
+  mcp: 'Usage: kit mcp [--root <path>] [--config <path>]\n\nRun the MCP server over stdio.',
 };
 
 async function detect(root: string): Promise<{
@@ -276,7 +276,9 @@ export async function run(
       }
       if (arg.startsWith('--')) {
         if (
-          !['--root', '--scope', '--plan', '--args'].includes(arg) ||
+          !['--root', '--config', '--scope', '--plan', '--args'].includes(
+            arg,
+          ) ||
           options[arg] !== undefined ||
           !argv[i + 1] ||
           argv[i + 1].startsWith('--')
@@ -292,14 +294,21 @@ export async function run(
       throw new Error('--force is only valid for init');
     if (options['--fail-fast'] && command !== 'verify')
       throw new Error('--fail-fast is only valid for verify');
+    if (options['--config'] && !['mcp', 'tool', 'release'].includes(command))
+      throw new Error('--config is only valid for mcp, tool, or release');
     let result: Result;
     if (
       command === 'mcp' &&
       positional.length === 1 &&
-      Object.keys(options).length === 0 &&
+      !options['--scope'] &&
+      !options['--plan'] &&
+      !options['--args'] &&
       !json
     ) {
-      await runStdio();
+      await runStdio({
+        projectRoot: options['--root'] ? root : undefined,
+        configPath: options['--config'],
+      });
       return 0;
     }
     if (
@@ -319,8 +328,19 @@ export async function run(
       const args = options['--args']
         ? objectArgument(options['--args'], '--args')
         : {};
-      if (options['--root']) args.projectRoot = root;
-      result = await invokeTool(positional[1], args);
+      if (positional[1].startsWith('release_')) {
+        if ('config' in args || 'configPath' in args || 'projectRoot' in args)
+          throw new Error('Release configuration is fixed at launch');
+        result = await invokeTool(positional[1], args, {
+          projectRoot: options['--root'] ? root : undefined,
+          configPath: options['--config'],
+        });
+      } else {
+        if (options['--config'])
+          throw new Error('--config requires a release tool');
+        if (options['--root']) args.projectRoot = root;
+        result = await invokeTool(positional[1], args);
+      }
     } else {
       const kitOperation =
         command === 'release' &&
@@ -360,6 +380,11 @@ export async function run(
           ...(options['--plan']
             ? { plan: objectArgument(options['--plan'], '--plan') }
             : {}),
+        },
+        undefined,
+        {
+          projectRoot: options['--root'] ? root : undefined,
+          configPath: options['--config'],
         },
       );
     }

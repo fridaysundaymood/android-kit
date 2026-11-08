@@ -1,6 +1,21 @@
 {
-  "name": "@android-kit/server",
-  "version": "1.0.0",
+  "name": "@budaknyenyel/kit-server",
+  "version": "0.1.0",
+  "description": "Android Kit MCP orchestration server",
+  "license": "MIT",
+  "homepage": "https://github.com/fridaysundaymood/android-kit#readme",
+  "bugs": "https://github.com/fridaysundaymood/android-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fridaysundaymood/android-kit.git",
+    "directory": "packages/server"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -9,18 +24,22 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@android-kit/schema": "file:../kit-schema",
-    "@android-kit/emu-lab": "file:../../../emu-lab",
-    "maestro-flow": "file:../../../maestro-flow",
-    "@android-kit/supa-multiuser-harness": "file:../../../supa-multiuser-harness",
-    "@android-kit/supa-release-gate-mcp": "file:../../../supa-release-gate-mcp",
-    "@android-kit/i18n-mcp": "file:../../../indonesian-english-linter/mcp",
+    "@budaknyenyel/kit-schema": "file:../kit-schema",
+    "@budaknyenyel/emu-lab": "file:../../../emu-lab",
+    "@budaknyenyel/maestro-flow": "file:../../../maestro-flow",
+    "@budaknyenyel/supa-multiuser-harness": "file:../../../supa-multiuser-harness",
+    "@budaknyenyel/supa-release-gate-mcp": "file:../../../supa-release-gate-mcp",
+    "@budaknyenyel/i18n-mcp": "file:../../../indonesian-english-linter/mcp",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "ajv": "^8.17.1",
     "yaml": "^2.8.1"

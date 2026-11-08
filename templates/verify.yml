@@ -4,15 +4,20 @@ on:
   pull_request:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          node-version: 22
-      # The project must declare @android-kit/cli and the selected tool prerequisites.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      # The project must declare @budaknyenyel/kit-cli and the selected tool prerequisites.
       - run: npm ci
       - name: Verify
         run: npx --no-install kit verify --scope lint --json

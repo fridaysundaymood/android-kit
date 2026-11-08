@@ -2,12 +2,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateResult } from '@android-kit/schema';
+import { validateResult } from '@budaknyenyel/kit-schema';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { expect, it } from 'vitest';
 
-it('serves prefixed tools and a valid doctor result over stdio', async () => {
+it('serves prefixed tools and a valid status result over stdio', async () => {
   const root = await mkdtemp(join(tmpdir(), 'android-kit-mcp-'));
   const client = new Client({
     name: 'android-kit-compat-test',
@@ -41,16 +41,16 @@ it('serves prefixed tools and a valid doctor result over stdio', async () => {
     expect(
       names.every((name) => prefixes.some((prefix) => name.startsWith(prefix))),
     ).toBe(true);
-    expect(names).toContain('kit_doctor');
+    expect(names).toContain('kit_status');
 
     const response = await client.callTool({
-      name: 'kit_doctor',
-      arguments: { projectRoot: root },
+      name: 'kit_status',
+      arguments: {},
     });
     expect(validateResult(response.structuredContent)).toBe(true);
     expect(response.structuredContent).toMatchObject({
       tool: 'kit',
-      operation: 'doctor',
+      operation: 'status',
     });
   } finally {
     await client.close();

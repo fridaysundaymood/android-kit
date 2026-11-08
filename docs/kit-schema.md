@@ -1,6 +1,6 @@
 # kit-schema v1
 
-The workspace package `@android-kit/schema` supplies the shared result and configuration contracts. During development, install it via a relative `file:` dependency to `packages/kit-schema`; build it before consuming it.
+The workspace package `@budaknyenyel/kit-schema` supplies the shared result and configuration contracts. During development, install it via a relative `file:` dependency to `packages/kit-schema`; build it before consuming it.
 
 A result has `schema_version: "1"`, `tool`, `operation`, `run_id`, `status`, optional `classification`, `summary`, `evidence`, `artifacts`, `started_at` (ISO date-time), and nonnegative `duration_ms`. Artifact paths are relative to the project root. Evidence entries are tool-defined. See `result.v1.json` for the complete schema.
 

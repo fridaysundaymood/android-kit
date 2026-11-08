@@ -1,11 +1,21 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { invokeKit, invokeTool, runStdio } from '@android-kit/server';
+import { fileURLToPath } from 'node:url';
+import { invokeKit, invokeTool, runStdio } from '@budaknyenyel/kit-server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { init, run } from './cli.js';
 
-vi.mock('@android-kit/server', () => {
+vi.mock('@budaknyenyel/kit-server', () => {
   const result = {
     schema_version: '1',
     tool: 'kit',
@@ -37,6 +47,25 @@ afterEach(async () => {
   );
   vi.restoreAllMocks();
 });
+
+it('runs the compiled CLI through a symlink', async () => {
+  const root = await temporary();
+  const windows = process.platform === 'win32';
+  const link = join(root, windows ? 'kit-dist' : 'kit.js');
+  await symlink(
+    fileURLToPath(
+      new URL(windows ? '../dist/' : '../dist/index.js', import.meta.url),
+    ),
+    link,
+    windows ? 'junction' : 'file',
+  );
+  const executable = windows ? join(link, 'index.js') : link;
+  const result = spawnSync(process.execPath, [executable, '--help'], {
+    encoding: 'utf8',
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('Usage: kit');
+}, 30000);
 
 async function command(args: string[]) {
   const lines: string[] = [];
@@ -204,7 +233,7 @@ describe('kit CLI', () => {
     expect(await readFile(join(root, 'android-kit.yaml'), 'utf8')).toContain(
       '# Detected Gradle variants: cleanDebug',
     );
-  });
+  }, 30_000);
 
   it('rejects malformed options and preserves JSON output and exit codes', async () => {
     expect(await command(['verify', '--scope', 'wrong'])).toMatchObject({
@@ -235,14 +264,22 @@ describe('kit CLI', () => {
     expect(
       (await command(['verify', '--args', JSON.stringify(args)])).code,
     ).toBe(0);
-    expect(invokeKit).toHaveBeenCalledWith('verify', args);
+    expect(invokeKit).toHaveBeenCalledWith('verify', args, undefined, {
+      projectRoot: undefined,
+      configPath: undefined,
+    });
     expect(
       (await command(['verify', '--root', root, '--fail-fast'])).code,
     ).toBe(0);
-    expect(invokeKit).toHaveBeenCalledWith('verify', {
-      projectRoot: root,
-      failFast: true,
-    });
+    expect(invokeKit).toHaveBeenCalledWith(
+      'verify',
+      {
+        projectRoot: root,
+        failFast: true,
+      },
+      undefined,
+      { projectRoot: root, configPath: undefined },
+    );
     expect((await command(['status', '--fail-fast'])).code).toBe(2);
     expect((await command(['verify', '--fail-fast', '--fail-fast'])).code).toBe(
       2,
@@ -259,10 +296,15 @@ describe('kit CLI', () => {
         ])
       ).code,
     ).toBe(0);
-    expect(invokeKit).toHaveBeenCalledWith('release_readiness', {
-      projectRoot: root,
-      plan: { name: 'synthetic' },
-    });
+    expect(invokeKit).toHaveBeenCalledWith(
+      'release_readiness',
+      {
+        projectRoot: root,
+        plan: { name: 'synthetic' },
+      },
+      undefined,
+      { projectRoot: root, configPath: undefined },
+    );
     expect(
       (
         await command([
@@ -277,7 +319,49 @@ describe('kit CLI', () => {
       projectRoot: root,
     });
     expect(await run(['mcp'], () => {})).toBe(0);
-    expect(runStdio).toHaveBeenCalled();
+    expect(runStdio).toHaveBeenCalledWith({
+      projectRoot: undefined,
+      configPath: undefined,
+    });
+    expect(
+      await run(['mcp', '--root', root, '--config', 'release.yaml'], () => {}),
+    ).toBe(0);
+    expect(runStdio).toHaveBeenCalledWith({
+      projectRoot: root,
+      configPath: 'release.yaml',
+    });
+    expect(
+      (
+        await command([
+          'tool',
+          'release_status',
+          '--root',
+          root,
+          '--config',
+          'release.yaml',
+        ])
+      ).code,
+    ).toBe(0);
+    expect(invokeTool).toHaveBeenCalledWith(
+      'release_status',
+      {},
+      {
+        projectRoot: root,
+        configPath: 'release.yaml',
+      },
+    );
+    for (const key of ['projectRoot', 'config', 'configPath']) {
+      expect(
+        (
+          await command([
+            'tool',
+            'release_status',
+            '--args',
+            JSON.stringify({ [key]: root }),
+          ])
+        ).code,
+      ).toBe(2);
+    }
   });
 });
 

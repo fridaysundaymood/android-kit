@@ -1,8 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import * as emu from '@android-kit/emu-lab';
-import * as i18n from '@android-kit/i18n-mcp';
+import * as emu from '@budaknyenyel/emu-lab';
+import * as i18n from '@budaknyenyel/i18n-mcp';
 import {
   composeConfigSchema,
   createResult,
@@ -10,9 +10,10 @@ import {
   type Result,
   type Status,
   validateResult,
-} from '@android-kit/schema';
-import * as backend from '@android-kit/supa-multiuser-harness';
-import * as release from '@android-kit/supa-release-gate-mcp';
+} from '@budaknyenyel/kit-schema';
+import * as maestro from '@budaknyenyel/maestro-flow';
+import * as backend from '@budaknyenyel/supa-multiuser-harness';
+import * as release from '@budaknyenyel/supa-release-gate-mcp';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -20,7 +21,6 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Ajv as AjvType } from 'ajv';
-import * as maestro from 'maestro-flow';
 import { parse } from 'yaml';
 
 const components = [emu, maestro, backend, release, i18n];
@@ -100,34 +100,64 @@ const doctors: Record<
       projectRoot:
         typeof args.projectRoot === 'string' ? args.projectRoot : undefined,
     }),
-  release_doctor: (args) =>
-    release.doctor({ configPath: releaseConfigPath(args) }),
 };
-function releaseConfigPath(args: Record<string, unknown>): string {
+export type ServerOptions = { projectRoot?: string; configPath?: string };
+function releaseConfigPath(options: ServerOptions): string {
   return resolve(
-    typeof args.projectRoot === 'string' ? args.projectRoot : process.cwd(),
-    typeof args.config === 'string' ? args.config : 'android-kit.yaml',
+    options.projectRoot ??
+      process.env.ANDROID_KIT_PROJECT_ROOT ??
+      process.cwd(),
+    options.configPath ??
+      process.env.ANDROID_KIT_RELEASE_CONFIG ??
+      'android-kit.yaml',
   );
 }
 async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
+  options: ServerOptions,
 ): Promise<Result> {
   try {
     if (
       name.startsWith('kit_') &&
       kitOperations.includes(name.slice(4) as KitOperation)
     )
-      return invokeKit(name.slice(4) as KitOperation, args as KitArgs);
+      return invokeKit(
+        name.slice(4) as KitOperation,
+        {
+          ...args,
+          ...(options.projectRoot ? { projectRoot: options.projectRoot } : {}),
+        } as KitArgs,
+        invokeTool,
+        options,
+      );
     const tool = componentByName.get(name);
     if (tool) {
-      if (doctors[name]) return await doctors[name](args);
       if (name.startsWith('release_')) {
+        if ('config' in args || 'configPath' in args || 'projectRoot' in args)
+          throw new Error('Release configuration is fixed at launch');
         const configured = release
-          .toolDefinitions({ configPath: releaseConfigPath(args) })
+          .toolDefinitions({ configPath: releaseConfigPath(options) })
           .find((candidate) => candidate.name === name);
-        if (configured) return await configured.handler(args);
+        if (configured) {
+          const properties = configured.inputSchema.properties;
+          if (Object.keys(args).some((key) => !Object.hasOwn(properties, key)))
+            throw new Error(
+              'Unexpected release tool argument; configuration is fixed at launch',
+            );
+          return await configured.handler(args);
+        }
       }
+      if (options.projectRoot) {
+        const configured = [
+          ...emu.toolDefinitions({ projectRoot: options.projectRoot }),
+          ...maestro.toolDefinitions({ projectRoot: options.projectRoot }),
+          ...backend.toolDefinitions({ projectRoot: options.projectRoot }),
+          ...i18n.toolDefinitions({ projectRoot: options.projectRoot }),
+        ].find((candidate) => candidate.name === name);
+        if (configured) return await configured.handler(args as never);
+      }
+      if (doctors[name]) return await doctors[name](args);
       return await tool.handler(args);
     }
     throw new Error(`Unknown tool: ${name}`);
@@ -138,8 +168,9 @@ async function dispatchTool(
 export async function invokeTool(
   name: string,
   args: Record<string, unknown> = {},
+  options: ServerOptions = {},
 ): Promise<Result> {
-  const result: unknown = await dispatchTool(name, args);
+  const result: unknown = await dispatchTool(name, args, options);
   return validateResult(result)
     ? result
     : failure(
@@ -186,6 +217,7 @@ export async function invokeKit(
   operation: KitOperation,
   args: KitArgs = {},
   invoke: typeof invokeTool = invokeTool,
+  serverOptions: ServerOptions = {},
 ): Promise<Result> {
   const startedAt = new Date();
   const results: Result[] = [];
@@ -239,7 +271,13 @@ export async function invokeKit(
             artifacts: [],
             startedAt,
           })
-        : await invoke(name, { ...root, ...options });
+        : await invoke(
+            name,
+            name.startsWith('release_') || invoke === invokeTool
+              ? options
+              : { ...root, ...options },
+            serverOptions,
+          );
       results.push(result);
       return result;
     };
@@ -674,9 +712,17 @@ export async function invokeKit(
     return failure('kit', operation, error, startedAt);
   }
 }
-export function createServer(): Server {
+export function createServer(options: ServerOptions = {}): Server {
+  const fixedOptions = {
+    projectRoot: resolve(
+      options.projectRoot ??
+        process.env.ANDROID_KIT_PROJECT_ROOT ??
+        process.cwd(),
+    ),
+    configPath: releaseConfigPath(options),
+  };
   const server = new Server(
-    { name: 'android-kit', version: '1.0.0' },
+    { name: 'android-kit', version: '0.1.0' },
     { capabilities: { tools: {} } },
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -687,7 +733,6 @@ export function createServer(): Server {
         inputSchema: {
           type: 'object' as const,
           properties: {
-            projectRoot: { type: 'string' },
             scope: {
               type: 'string',
               enum: ['all', 'device', 'backend', 'lint'],
@@ -700,21 +745,67 @@ export function createServer(): Server {
             instrumentation: { type: 'object' },
             backend: { type: 'object' },
           },
-          additionalProperties: true,
+          additionalProperties: false,
         },
       })),
-      ...componentTools.map(({ name, description, inputSchema }) => ({
-        name,
-        description,
-        inputSchema: inputSchema as { type: 'object'; [key: string]: unknown },
-      })),
+      ...componentTools.map(({ name, description, inputSchema }) => {
+        if (!name.startsWith('release_'))
+          return {
+            name,
+            description,
+            inputSchema: inputSchema as {
+              type: 'object';
+              [key: string]: unknown;
+            },
+          };
+        const { config, configPath, projectRoot, ...properties } =
+          (inputSchema.properties ?? {}) as Record<string, unknown>;
+        const required = Array.isArray(inputSchema.required)
+          ? inputSchema.required.filter(
+              (key) => !['config', 'configPath', 'projectRoot'].includes(key),
+            )
+          : undefined;
+        return {
+          name,
+          description,
+          inputSchema: {
+            ...inputSchema,
+            type: 'object' as const,
+            properties,
+            ...(required ? { required } : {}),
+            additionalProperties: false,
+          },
+        };
+      }),
     ],
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const result = await invokeTool(
-      request.params.name,
-      request.params.arguments ?? {},
+    const args = request.params.arguments ?? {};
+    const forbidden = [
+      'projectRoot',
+      'config',
+      'configPath',
+      'executable',
+      'adbPath',
+      'gradlePath',
+      'maestroPath',
+      'supabasePath',
+    ];
+    const sections = request.params.name.startsWith('kit_')
+      ? ['build', 'instrumentation', 'maestro', 'backend', 'i18n'].map((key) =>
+          object(args[key]),
+        )
+      : [];
+    const rejected = [args, ...sections].some((input) =>
+      forbidden.some((key) => key in input),
     );
+    const result = rejected
+      ? failure(
+          'kit',
+          request.params.name,
+          new Error('Launch configuration cannot be changed by a tool call'),
+        )
+      : await invokeTool(request.params.name, args, fixedOptions);
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(result) }],
       structuredContent: { ...result },
@@ -723,6 +814,6 @@ export function createServer(): Server {
   });
   return server;
 }
-export async function runStdio(): Promise<void> {
-  await createServer().connect(new StdioServerTransport());
+export async function runStdio(options: ServerOptions = {}): Promise<void> {
+  await createServer(options).connect(new StdioServerTransport());
 }

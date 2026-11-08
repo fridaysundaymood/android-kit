@@ -1,14 +1,14 @@
 {
   "name": "android-kit",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "lint": "biome check .",
-    "build": "npm run build --workspace=@android-kit/schema && npm run build --workspace=@android-kit/server && npm run build --workspace=@android-kit/cli",
+    "build": "npm run build --workspace=@budaknyenyel/kit-schema && npm run build --workspace=@budaknyenyel/kit-server && npm run build --workspace=@budaknyenyel/kit-cli",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

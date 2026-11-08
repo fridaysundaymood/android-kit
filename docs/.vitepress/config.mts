@@ -1,9 +1,9 @@
-import * as emu from '@android-kit/emu-lab';
-import * as i18n from '@android-kit/i18n-mcp';
-import { composeConfigSchema } from '@android-kit/schema';
-import * as backend from '@android-kit/supa-multiuser-harness';
-import * as release from '@android-kit/supa-release-gate-mcp';
-import * as maestro from 'maestro-flow';
+import * as emu from '@budaknyenyel/emu-lab';
+import * as i18n from '@budaknyenyel/i18n-mcp';
+import { composeConfigSchema } from '@budaknyenyel/kit-schema';
+import * as maestro from '@budaknyenyel/maestro-flow';
+import * as backend from '@budaknyenyel/supa-multiuser-harness';
+import * as release from '@budaknyenyel/supa-release-gate-mcp';
 import { defineConfig } from 'vitepress';
 
 const sections = [emu, maestro, backend, i18n, release];

@@ -1,17 +1,12 @@
 # Getting started
 
-The kit composes separately distributed tools through their public APIs. Install Node.js LTS and npm, then install the Android SDK command-line tools and a JDK compatible with your Android project. Device tests also need `adb`, an emulator and an appropriate system image; UI journeys need Maestro. Local backend scenarios need Docker and the Supabase CLI. The i18n MCP package invokes the JVM localization CLI. Release planning requires the relevant release-gate configuration; it does not authorize deployment.
+The kit composes separately distributed tools through their public APIs. Install Node.js 24 or newer and npm, then install the Android SDK command-line tools and a JDK compatible with your Android project. Device tests also need `adb`, an emulator and an appropriate system image; UI journeys need Maestro. Local backend scenarios need Docker and the Supabase CLI. The i18n MCP package invokes the JVM localization CLI. Release planning requires the relevant release-gate configuration; it does not authorize deployment.
 
 - **Windows:** enable a supported hypervisor for emulator acceleration, install the SDK in a writable path, and put Android platform-tools on `PATH`. Use PowerShell or a shell that can run your Gradle wrapper. Docker Desktop must be running before local Supabase operations.
 - **macOS:** install Android SDK platform-tools and an emulator image matching the host architecture. Enable the Docker runtime before local Supabase operations.
 - **Linux:** install Android SDK platform-tools and configure KVM access for accelerated emulation. Ensure your user can access the Docker daemon before local Supabase operations.
 
-From a checkout of android-kit:
-
-```sh
-npm ci
-npm run build
-```
+Install the CLI with `npm install -g @budaknyenyel/kit-cli`. For source development, see the [sibling checkout and build instructions](../README.md#installation).
 
 In the target project's root, run the installed `kit` executable:
 

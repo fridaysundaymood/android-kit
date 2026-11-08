@@ -1,6 +1,21 @@
 {
-  "name": "@android-kit/cli",
-  "version": "1.0.0",
+  "name": "@budaknyenyel/kit-cli",
+  "version": "0.1.0",
+  "description": "Android Kit command-line interface",
+  "license": "MIT",
+  "homepage": "https://github.com/fridaysundaymood/android-kit#readme",
+  "bugs": "https://github.com/fridaysundaymood/android-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fridaysundaymood/android-kit.git",
+    "directory": "packages/cli"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "kit": "./dist/index.js"
@@ -12,13 +27,17 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@android-kit/schema": "1.0.0",
-    "@android-kit/server": "1.0.0"
+    "@budaknyenyel/kit-schema": "file:../kit-schema",
+    "@budaknyenyel/kit-server": "file:../server"
   }
 }

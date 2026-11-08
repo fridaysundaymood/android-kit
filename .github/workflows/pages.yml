@@ -5,8 +5,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -17,39 +15,40 @@ jobs:
       run:
         working-directory: android-kit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: android-kit
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: fridaysundaymood/emu-lab
           path: emu-lab
-          ssh-key: ${{ secrets.DEPLOY_KEY_EMU_LAB }}
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: fridaysundaymood/maestro-flow
           path: maestro-flow
-          ssh-key: ${{ secrets.DEPLOY_KEY_MAESTRO_FLOW }}
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: fridaysundaymood/supa-multiuser-harness
           path: supa-multiuser-harness
-          ssh-key: ${{ secrets.DEPLOY_KEY_SUPA_MULTIUSER_HARNESS }}
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: fridaysundaymood/supa-release-gate-mcp
           path: supa-release-gate-mcp
-          ssh-key: ${{ secrets.DEPLOY_KEY_SUPA_RELEASE_GATE_MCP }}
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: fridaysundaymood/indonesian-english-linter
           path: indonesian-english-linter
-          ssh-key: ${{ secrets.DEPLOY_KEY_INDONESIAN_ENGLISH_LINTER }}
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
       - run: npm ci
-      - run: npm run build --workspace=@android-kit/schema
+      - run: npm run build --workspace=@budaknyenyel/kit-schema
       - run: npm ci && npm run build
         working-directory: emu-lab
       - run: npm ci && npm run build
@@ -61,17 +60,21 @@ jobs:
       - run: npm ci && npm run build
         working-directory: indonesian-english-linter/mcp
       - run: npm run docs:build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: android-kit/docs/.vitepress/dist
   deploy:
     if: github.event.repository.private == false
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

@@ -1,16 +1,110 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { toolDefinitions as emuTools } from '@android-kit/emu-lab';
-import { toolDefinitions as i18nTools } from '@android-kit/i18n-mcp';
-import { createResult, type Result, type Status } from '@android-kit/schema';
-import { toolDefinitions as backendTools } from '@android-kit/supa-multiuser-harness';
-import { toolDefinitions as releaseTools } from '@android-kit/supa-release-gate-mcp';
+import { toolDefinitions as emuTools } from '@budaknyenyel/emu-lab';
+import { toolDefinitions as i18nTools } from '@budaknyenyel/i18n-mcp';
+import {
+  createResult,
+  type Result,
+  type Status,
+} from '@budaknyenyel/kit-schema';
+import { toolDefinitions as maestroTools } from '@budaknyenyel/maestro-flow';
+import { toolDefinitions as backendTools } from '@budaknyenyel/supa-multiuser-harness';
+import { toolDefinitions as releaseTools } from '@budaknyenyel/supa-release-gate-mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { toolDefinitions as maestroTools } from 'maestro-flow';
 import { describe, expect, it } from 'vitest';
 import { createServer, invokeKit, toolNames } from './index.js';
+
+it('pins release configuration at server creation and rejects per-call overrides', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kit-release-config-'));
+  const other = await mkdtemp(join(tmpdir(), 'kit-release-other-'));
+  const { publicKey } = generateKeyPairSync('ed25519');
+  const config = JSON.stringify({
+    releaseGate: {
+      directory: 'ledger',
+      approvalDirectory: 'approvals',
+      trustedPublicKeys: {
+        test: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      },
+      policies: [
+        {
+          provider: 'synthetic',
+          target: 'app',
+          operation: 'release',
+          id: 'test',
+          mode: 'write',
+        },
+      ],
+    },
+  });
+  const server = createServer({
+    projectRoot: root,
+    configPath: 'trusted.yaml',
+  });
+  const client = new Client({
+    name: 'release-security-test',
+    version: '1.0.0',
+  });
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  try {
+    await writeFile(join(root, 'trusted.yaml'), config, { mode: 0o600 });
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+    const { tools } = await client.listTools();
+    expect(
+      tools.find((tool) => tool.name === 'release_status')?.inputSchema
+        .additionalProperties,
+    ).toBe(false);
+    const properties = tools.find((tool) => tool.name === 'release_status')
+      ?.inputSchema.properties;
+    expect(properties).not.toHaveProperty('config');
+    expect(properties).not.toHaveProperty('configPath');
+    expect(properties).not.toHaveProperty('projectRoot');
+    expect(
+      (await client.callTool({ name: 'release_status', arguments: {} }))
+        .structuredContent,
+    ).toMatchObject({ status: 'pass' });
+    for (const args of [
+      { projectRoot: other },
+      { config: 'other.yaml' },
+      { configPath: join(other, 'other.yaml') },
+    ]) {
+      const result = await client.callTool({
+        name: 'release_status',
+        arguments: args,
+      });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ status: 'error' });
+    }
+    for (const name of [
+      'kit_doctor',
+      'emu_lab_doctor',
+      'maestro_flow_doctor',
+      'backend_doctor',
+      'i18n_doctor',
+    ]) {
+      const result = await client.callTool({
+        name,
+        arguments: { projectRoot: other },
+      });
+      expect(result.isError).toBe(true);
+    }
+    expect(
+      (await client.callTool({ name: 'release_status', arguments: {} }))
+        .structuredContent,
+    ).toMatchObject({ status: 'pass' });
+  } finally {
+    await client.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+    await rm(other, { recursive: true, force: true });
+  }
+}, 30_000);
 
 function result(name: string, status: Status = 'pass'): Result {
   return createResult({

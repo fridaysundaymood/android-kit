@@ -7,49 +7,49 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
     defaults:
       run:
         working-directory: android-kit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
           path: android-kit
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: fridaysundaymood/kit-fixture-app
-          path: kit-fixture-app
-          ssh-key: ${{ secrets.DEPLOY_KEY_KIT_FIXTURE_APP }}
-      - uses: actions/checkout@v4
-        with:
+          persist-credentials: false
           repository: fridaysundaymood/emu-lab
           path: emu-lab
-          ssh-key: ${{ secrets.DEPLOY_KEY_EMU_LAB }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
           repository: fridaysundaymood/maestro-flow
           path: maestro-flow
-          ssh-key: ${{ secrets.DEPLOY_KEY_MAESTRO_FLOW }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
           repository: fridaysundaymood/supa-multiuser-harness
           path: supa-multiuser-harness
-          ssh-key: ${{ secrets.DEPLOY_KEY_SUPA_MULTIUSER_HARNESS }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
           repository: fridaysundaymood/supa-release-gate-mcp
           path: supa-release-gate-mcp
-          ssh-key: ${{ secrets.DEPLOY_KEY_SUPA_RELEASE_GATE_MCP }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          persist-credentials: false
           repository: fridaysundaymood/indonesian-english-linter
           path: indonesian-english-linter
-          ssh-key: ${{ secrets.DEPLOY_KEY_INDONESIAN_ENGLISH_LINTER }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm run build --workspace=@android-kit/schema
+      - run: npm run build --workspace=@budaknyenyel/kit-schema
       - run: npm ci && npm run build
         working-directory: emu-lab
       - run: npm ci && npm run build
@@ -61,43 +61,17 @@ jobs:
       - run: npm ci && npm run build
         working-directory: indonesian-english-linter/mcp
       - run: npm run build
-      - run: npm test
-        env:
-          ANDROID_KIT_FIXTURE: ${{ github.workspace }}/kit-fixture-app
       - name: Check tag and prepare publishable manifests
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          import path from 'node:path';
-          const version = process.env.GITHUB_REF_NAME.slice(1);
-          for (const dir of fs.readdirSync('packages')) {
-            const manifest = path.join('packages', dir, 'package.json');
-            if (!fs.existsSync(manifest)) continue;
-            const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-            if (pkg.private) continue;
-            if (pkg.version !== version) throw new Error(`${pkg.name}: version ${pkg.version} does not match tag v${version}`);
-            for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
-              for (const [name, spec] of Object.entries(pkg[section] ?? {})) {
-                if (!spec.startsWith('file:')) continue;
-                const target = path.resolve(path.dirname(manifest), spec.slice(5), 'package.json');
-                const dependency = JSON.parse(fs.readFileSync(target, 'utf8'));
-                if (dependency.name !== name) throw new Error(`Dependency name mismatch: ${name}`);
-                pkg[section][name] = dependency.version;
-              }
-            }
-            fs.writeFileSync(manifest, `${JSON.stringify(pkg, null, 2)}\n`);
-          }
-          NODE
+        run: node scripts/prepare-publish.mjs "$RUNNER_TEMP/android-kit-publish" "$GITHUB_REF_NAME"
       - name: Publish schema
-        run: npm publish --workspace=@android-kit/schema --access public
+        run: npm publish "$RUNNER_TEMP/android-kit-publish/kit-schema" --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish server
-        run: npm publish --workspace=@android-kit/server --access public
+        run: npm publish "$RUNNER_TEMP/android-kit-publish/server" --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish CLI
-        run: npm publish --workspace=@android-kit/cli --access public
+        run: npm publish "$RUNNER_TEMP/android-kit-publish/cli" --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

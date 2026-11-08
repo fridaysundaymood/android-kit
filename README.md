@@ -22,9 +22,17 @@ Each one is useful on its own:
 
 Android developers (Kotlin/Compose, optionally Supabase) who use AI coding agents and want them to test and ship safely, not just write code.
 
-## Use from a checkout
+## Installation
 
-Install Node.js LTS, then run `npm ci` and `npm run build`. Install or link the `@android-kit/cli` workspace package to put `kit` on your PATH. In an Android project:
+Install Node.js 24 or newer, then install the CLI from npm:
+
+```sh
+npm install -g @budaknyenyel/kit-cli
+```
+
+For development from source, clone `android-kit`, `emu-lab`, `maestro-flow`, `supa-multiuser-harness`, `supa-release-gate-mcp`, and `indonesian-english-linter` into the same parent directory. The kit uses local `file:` dependencies to those sibling checkouts. Run `npm ci` and `npm run build --workspace=@budaknyenyel/kit-schema` in `android-kit`, then run `npm ci` and `npm run build` in each sibling (the linter package is in its `mcp` directory). Finally run `npm run build` and `npm link --workspace=@budaknyenyel/kit-cli` in `android-kit`.
+
+In an Android project:
 
 ```sh
 kit init --json
@@ -35,6 +43,9 @@ kit release plan --plan '<JSON object>' --json
 ```
 
 Use `--root PATH` to select another project. `kit mcp` starts the stdio server. Direct MCP tools are also callable with `kit tool <MCP_TOOL_NAME> --args '<JSON object>' --json`. Status includes the backend and release gate's pending plans. A release plan must be supplied; planning does not approve or execute it.
+
+For release tools, set the project and release-gate configuration when launching `kit mcp` or `kit tool` with `--root PATH` and `--config PATH`, or with `ANDROID_KIT_PROJECT_ROOT` and `ANDROID_KIT_RELEASE_CONFIG`. Flags take precedence over environment variables. Release tool arguments cannot change the project root or configuration.
+
 `kit init` creates editable defaults for detected Android modules, localized resources, Maestro flows and Supabase projects. Verification builds and leases a device, runs instrumentation and discovered flows, then releases the lease; it reports unavailable prerequisites and capabilities explicitly.
 
 Read the [getting-started guide](docs/getting-started.md) for platform prerequisites and the [fixture walkthrough](docs/fixture.md) for a synthetic example. Run `npm run docs:dev` to browse the site locally or `npm run docs:build` to build it. Templates for configuration and CI live in [templates](templates/); configure the external tools required by the chosen scope before using them.
