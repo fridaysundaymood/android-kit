@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -50,6 +51,24 @@ it('pins release configuration at server creation and rejects per-call overrides
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
   try {
+    if (process.platform === 'win32') {
+      const system32 = join(process.env.SystemRoot as string, 'System32');
+      const identity = execFileSync(
+        join(system32, 'whoami.exe'),
+        ['/user', '/fo', 'csv', '/nh'],
+        { encoding: 'utf8' },
+      );
+      const sid = identity.match(/S-1-(?:\d+-)*\d+/)?.[0];
+      if (!sid) throw new Error('Cannot determine fixture owner SID');
+      execFileSync(join(system32, 'icacls.exe'), [
+        root,
+        '/inheritance:r',
+        '/grant:r',
+        `*${sid}:(OI)(CI)F`,
+        '*S-1-5-18:(OI)(CI)F',
+        '*S-1-5-32-544:(OI)(CI)F',
+      ]);
+    }
     await writeFile(join(root, 'trusted.yaml'), config, { mode: 0o600 });
     await Promise.all([
       server.connect(serverTransport),

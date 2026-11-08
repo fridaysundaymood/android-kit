@@ -6,7 +6,7 @@ The kit composes separately distributed tools through their public APIs. Install
 - **macOS:** install Android SDK platform-tools and an emulator image matching the host architecture. Enable the Docker runtime before local Supabase operations.
 - **Linux:** install Android SDK platform-tools and configure KVM access for accelerated emulation. Ensure your user can access the Docker daemon before local Supabase operations.
 
-Install the CLI with `npm install -g @budaknyenyel/kit-cli`. For source development, see the [sibling checkout and build instructions](../README.md#installation).
+Install the CLI with `npm install -g @budaknyenyel/kit-cli`. For source development, see the [sibling checkout and build instructions](https://github.com/fridaysundaymood/android-kit#installation).
 
 In the target project's root, run the installed `kit` executable:
 
