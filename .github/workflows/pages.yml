@@ -11,10 +11,7 @@ concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,9 +61,17 @@ jobs:
       - run: npm ci && npm run build
         working-directory: indonesian-english-linter/mcp
       - run: npm run docs:build
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: android-kit/docs/.vitepress/dist
+  deploy:
+    if: github.event.repository.private == false
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
       - id: deploy
         uses: actions/deploy-pages@v4
