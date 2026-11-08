@@ -84,10 +84,13 @@ it('pins release configuration at server creation and rejects per-call overrides
     expect(properties).not.toHaveProperty('config');
     expect(properties).not.toHaveProperty('configPath');
     expect(properties).not.toHaveProperty('projectRoot');
-    expect(
-      (await client.callTool({ name: 'release_status', arguments: {} }))
-        .structuredContent,
-    ).toMatchObject({ status: 'pass' });
+    const initial = await client.callTool({
+      name: 'release_status',
+      arguments: {},
+    });
+    expect(initial.structuredContent?.status, JSON.stringify(initial)).toBe(
+      'pass',
+    );
     for (const args of [
       { projectRoot: other },
       { config: 'other.yaml' },
