@@ -18,6 +18,20 @@ Each one is useful on its own:
 | [indonesian-english-linter](https://github.com/fridaysundaymood/indonesian-english-linter) | Localization linter for display/data boundaries (EN/ID first, any locale pair)                        |
 | [supa-release-gate-mcp](https://github.com/fridaysundaymood/supa-release-gate-mcp)         | Plan, dry run, approve, deploy, verify, and record production changes                                 |
 
+The CLI and MCP server compose the five tools, with skills providing lifecycle guidance:
+
+```mermaid
+flowchart LR
+  CLI["kit CLI"] --> Kit["Kit orchestration"]
+  MCP["kit MCP server"] --> Kit
+  Skills["Lifecycle skills"] -. guidance .-> Kit
+  Kit --> Emu["emu-lab"]
+  Kit --> Maestro["maestro-flow"]
+  Kit --> Backend["supa-multiuser-harness"]
+  Kit --> I18n["indonesian-english-linter"]
+  Kit --> Release["supa-release-gate-mcp"]
+```
+
 ## Who it's for
 
 Android developers (Kotlin/Compose, optionally Supabase) who use AI coding agents and want them to test and ship safely, not just write code.
@@ -47,6 +61,20 @@ Use `--root PATH` to select another project. `kit mcp` starts the stdio server. 
 For release tools, set the project and release-gate configuration when launching `kit mcp` or `kit tool` with `--root PATH` and `--config PATH`, or with `ANDROID_KIT_PROJECT_ROOT` and `ANDROID_KIT_RELEASE_CONFIG`. Flags take precedence over environment variables. Release tool arguments cannot change the project root or configuration.
 
 `kit init` creates editable defaults for detected Android modules, localized resources, Maestro flows and Supabase projects. Verification builds and leases a device, runs instrumentation and discovered flows, then releases the lease; it reports unavailable prerequisites and capabilities explicitly.
+
+For the full scope, verification runs these stages when their prerequisites are available:
+
+```mermaid
+flowchart LR
+  Lint["i18n and Maestro lint"] --> Build["Build"]
+  Build --> Lease["Lease device"]
+  Lease --> Tests["Instrumentation"]
+  Tests --> Flows["Maestro flows"]
+  Flows --> Release["Release lease"]
+  Release --> Backend["Backend verify and suite"]
+  Backend --> Down["Stop stack if started by kit"]
+  Down --> Summary["Result summary"]
+```
 
 Read the [getting-started guide](docs/getting-started.md) for platform prerequisites and the [fixture walkthrough](docs/fixture.md) for a synthetic example. Run `npm run docs:dev` to browse the site locally or `npm run docs:build` to build it. Templates for configuration and CI live in [templates](templates/); configure the external tools required by the chosen scope before using them.
 

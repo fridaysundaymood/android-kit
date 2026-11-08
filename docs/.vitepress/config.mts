@@ -4,7 +4,7 @@ import { composeConfigSchema } from '@budaknyenyel/kit-schema';
 import * as maestro from '@budaknyenyel/maestro-flow';
 import * as backend from '@budaknyenyel/supa-multiuser-harness';
 import * as release from '@budaknyenyel/supa-release-gate-mcp';
-import { defineConfig } from 'vitepress';
+import { withMermaid } from 'vitepress-plugin-mermaid';
 
 const sections = [emu, maestro, backend, i18n, release];
 const configReference = JSON.stringify(
@@ -22,7 +22,7 @@ const configReference = JSON.stringify(
 
 const repository = process.env.GITHUB_REPOSITORY?.split('/')[1];
 
-export default defineConfig({
+export default withMermaid({
   title: 'android-kit',
   description: 'Android development tools and lifecycle guidance',
   base: process.env.GITHUB_ACTIONS && repository ? `/${repository}/` : '/',
