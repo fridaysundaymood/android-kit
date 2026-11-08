@@ -18,32 +18,32 @@ jobs:
         with:
           repository: fridaysundaymood/kit-fixture-app
           path: kit-fixture-app
-          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+          ssh-key: ${{ secrets.DEPLOY_KEY_KIT_FIXTURE_APP }}
       - uses: actions/checkout@v4
         with:
           repository: fridaysundaymood/emu-lab
           path: emu-lab
-          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+          ssh-key: ${{ secrets.DEPLOY_KEY_EMU_LAB }}
       - uses: actions/checkout@v4
         with:
           repository: fridaysundaymood/maestro-flow
           path: maestro-flow
-          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+          ssh-key: ${{ secrets.DEPLOY_KEY_MAESTRO_FLOW }}
       - uses: actions/checkout@v4
         with:
           repository: fridaysundaymood/supa-multiuser-harness
           path: supa-multiuser-harness
-          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+          ssh-key: ${{ secrets.DEPLOY_KEY_SUPA_MULTIUSER_HARNESS }}
       - uses: actions/checkout@v4
         with:
           repository: fridaysundaymood/supa-release-gate-mcp
           path: supa-release-gate-mcp
-          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+          ssh-key: ${{ secrets.DEPLOY_KEY_SUPA_RELEASE_GATE_MCP }}
       - uses: actions/checkout@v4
         with:
           repository: fridaysundaymood/indonesian-english-linter
           path: indonesian-english-linter
-          token: ${{ secrets.KIT_REPOS_TOKEN || github.token }}
+          ssh-key: ${{ secrets.DEPLOY_KEY_INDONESIAN_ENGLISH_LINTER }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
