@@ -1,6 +1,21 @@
 {
-  "name": "@android-kit/schema",
-  "version": "1.0.0",
+  "name": "@budaknyenyel/kit-schema",
+  "version": "0.1.0",
+  "description": "Shared schemas for Android Kit tools",
+  "license": "MIT",
+  "homepage": "https://github.com/fridaysundaymood/android-kit#readme",
+  "bugs": "https://github.com/fridaysundaymood/android-kit/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fridaysundaymood/android-kit.git",
+    "directory": "packages/kit-schema"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,10 +30,14 @@
   "files": [
     "dist",
     "result.v1.json",
-    "config.v1.json"
+    "config.v1.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "node -e \"require('node:fs').accessSync('dist/index.js')\""
   },
   "dependencies": {
     "ajv": "^8.17.1",
