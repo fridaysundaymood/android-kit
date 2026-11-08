@@ -18,19 +18,30 @@ Each one is useful on its own:
 | [indonesian-english-linter](https://github.com/fridaysundaymood/indonesian-english-linter) | Localization linter for display/data boundaries (EN/ID first, any locale pair)                        |
 | [supa-release-gate-mcp](https://github.com/fridaysundaymood/supa-release-gate-mcp)         | Plan, dry run, approve, deploy, verify, and record production changes                                 |
 
-The CLI and MCP server compose the five tools, with skills providing lifecycle guidance:
+The kit brings five tools to agents, developers and CI, each operating on its own targets:
 
 ```mermaid
-flowchart LR
-  CLI["kit CLI"] --> Kit["Kit orchestration"]
-  MCP["kit MCP server"] --> Kit
-  Skills["Lifecycle skills"] -. guidance .-> Kit
-  Kit --> Emu["emu-lab"]
-  Kit --> Maestro["maestro-flow"]
-  Kit --> Backend["supa-multiuser-harness"]
-  Kit --> I18n["indonesian-english-linter"]
-  Kit --> Release["supa-release-gate-mcp"]
+flowchart TB
+  subgraph Users["Who uses it"]
+    Agent["AI agent: MCP client"]
+    Dev["Developer: kit CLI"]
+    CI["CI"]
+  end
+  Kit["android-kit: MCP server, kit CLI, skills"]
+  Agent --> Kit
+  Dev --> Kit
+  CI --> Kit
+  Kit --> Emu["emu-lab: emulators and test runs"]
+  Kit --> Maestro["maestro-flow: UI journeys"]
+  Kit --> Backend["supa-multiuser-harness: backend security"]
+  Kit --> I18n["indonesian-english-linter: display language bugs"]
+  Kit --> Gate["supa-release-gate-mcp: approved deploys"]
+  Emu --> Device["Android emulator"]
+  Maestro --> Device
+  Backend --> Local["Local Supabase: Docker"]
+  Gate --> Cloud["Play / Cloudflare / GCP"]
 ```
+The release gate also supports Supabase releases; release planning alone does not deploy.
 
 ## Who it's for
 
@@ -65,15 +76,26 @@ For release tools, set the project and release-gate configuration when launching
 For the full scope, verification runs these stages when their prerequisites are available:
 
 ```mermaid
-flowchart LR
-  Lint["i18n and Maestro lint"] --> Build["Build"]
-  Build --> Lease["Lease device"]
-  Lease --> Tests["Instrumentation"]
-  Tests --> Flows["Maestro flows"]
-  Flows --> Release["Release lease"]
-  Release --> Backend["Backend verify and suite"]
-  Backend --> Down["Stop stack if started by kit"]
-  Down --> Summary["Result summary"]
+flowchart TB
+  subgraph Static["Static"]
+    I18n["i18n lint"] --> FlowLint["Maestro lint"]
+  end
+  subgraph Device["Device"]
+    Build["Build"] --> Lease["Lease device"]
+    Lease --> Tests["Instrumentation"]
+    Tests --> Flows["Maestro flows"]
+    Flows --> Release["Release lease"]
+    Flows -. "lost device: one replacement lease" .-> Lease
+  end
+  subgraph Backend["Backend"]
+    Up["Stack up if stopped"] --> Verify["Verify migrations"]
+    Verify --> Suite["Default suite or scenario"]
+    Suite --> Down["Stack down if kit started it"]
+  end
+  FlowLint --> Build
+  Release --> Up
+  Down --> Summary["Summary: worst status wins"]
+  Policy["Independent steps continue; fail-fast is opt-in"] -.-> Summary
 ```
 
 Read the [getting-started guide](docs/getting-started.md) for platform prerequisites and the [fixture walkthrough](docs/fixture.md) for a synthetic example. Run `npm run docs:dev` to browse the site locally or `npm run docs:build` to build it. Templates for configuration and CI live in [templates](templates/); configure the external tools required by the chosen scope before using them.
